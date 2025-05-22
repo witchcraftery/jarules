@@ -1,0 +1,115 @@
+/* Basic Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    font-family: Arial, Helvetica, sans-serif; /* Basic font, can be overridden by body */
+}
+
+:root {
+    --accent-purple: #9b59b6; /* A nice shade of purple */
+    --dark-bg-primary: #1e1e1e;     /* Main background - very dark grey */
+    --dark-bg-secondary: #252526;  /* Header background - slightly lighter dark grey */
+    --dark-bg-tertiary: #2d2d2d;   /* Panel background - another dark shade */
+    --text-color-primary: #d4d4d4;  /* Primary text color - light grey */
+    --text-color-secondary: #ffffff;/* For important text like logos or headers */
+    --border-color: #333333;        /* Default border for panels */
+    --accent-border-color: var(--accent-purple); /* Purple border for accents */
+}
+
+body {
+    background-color: var(--dark-bg-primary);
+    color: var(--text-color-primary);
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full viewport height */
+    overflow: hidden; /* Prevent body scrollbars, main content will handle overflow */
+}
+
+header {
+    background-color: var(--dark-bg-secondary);
+    padding: 10px 20px; /* Vertical padding 10px, horizontal 20px */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color); /* Subtle border */
+    height: 50px; /* Fixed header height */
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.logo {
+    font-weight: bold;
+    color: var(--accent-purple); /* Using purple for the logo text */
+    font-size: 1.2em;
+}
+
+.user-settings {
+    font-size: 0.9em;
+    color: var(--text-color-primary);
+}
+
+main {
+    display: flex;
+    flex-grow: 1; /* Allows main to take up remaining space after header */
+    overflow: hidden; /* Panels will manage their own scrolling */
+}
+
+.panel {
+    background-color: var(--dark-bg-tertiary);
+    padding: 15px; /* Internal spacing for panel content */
+    border: 1px solid var(--border-color); /* Default border for all panels */
+    margin: 5px; /* Small margin around panels */
+    display: flex; /* Make panels flex containers for their content if needed */
+    flex-direction: column; /* Stack content vertically within panels */
+    overflow-y: auto; /* Allow vertical scrolling within panels if content overflows */
+}
+
+/* Panel Layout & Sizing (Flexbox) */
+#chatHistoryPanel {
+    width: 250px; /* Fixed width for left sidebar */
+    border-right: 1px solid var(--accent-border-color); /* Purple accent border */
+    flex-shrink: 0; /* Prevent from shrinking */
+}
+
+#activeChatPanel {
+    flex-grow: 3; /* Takes 3 parts of available space in the central area */
+    /* No specific border here, relies on general .panel border or adjacent panel borders */
+}
+
+#fileViewerPanel {
+    flex-grow: 2; /* Takes 2 parts of available space in the central area */
+    border-left: 1px solid var(--border-color); /* Standard border between chat and file viewer */
+}
+
+#fileExplorerPanel {
+    width: 250px; /* Fixed width for right sidebar */
+    border-left: 1px solid var(--accent-border-color); /* Purple accent border */
+    flex-shrink: 0; /* Prevent from shrinking */
+}
+
+/* Example for placeholder text styling within panels (optional) */
+.panel p {
+    color: var(--text-color-primary);
+    font-style: italic;
+    text-align: center;
+    margin-top: 20px;
+}
+
+/* Example of specific styling for panel headers if they were separate elements */
+/* .panel-header {
+    padding: 8px 12px;
+    font-weight: bold;
+    background-color: var(--dark-bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color-secondary);
+} */
+
+/* Ensure main content area itself doesn't show scrollbars if panels are too wide/tall */
+main > * {
+  max-height: calc(100vh - 50px - 10px); /* Header height and main margin */
+}
+```
