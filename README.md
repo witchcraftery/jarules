@@ -1,5 +1,7 @@
 # JaRules - Your Async Development Agent 🤖
 
+![JaRules Asynchronous Development Assistant](https://raw.githubusercontent.com/witchcraftery/jarules/main/jarules_title-card.jpg)
+
 ## Overview
 
 JaRules is an asynchronous development assistant designed to streamline your software engineering tasks. It connects to your local file system, GitHub repositories, and various AI APIs (starting with Gemini). Through an intuitive interface (initially CLI, evolving to a chat-based UI), JaRules aims to help you write code, tackle bugs, manage features, and more!
