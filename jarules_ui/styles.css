@@ -1,0 +1,233 @@
+/* Basic Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    font-family: Arial, Helvetica, sans-serif; /* Basic font, can be overridden by body */
+}
+
+:root {
+    --accent-purple: #9b59b6; /* A nice shade of purple */
+    --dark-bg-primary: #1e1e1e;     /* Main background - very dark grey */
+    --dark-bg-secondary: #252526;  /* Header background - slightly lighter dark grey */
+    --dark-bg-tertiary: #2d2d2d;   /* Panel background - another dark shade */
+    --text-color-primary: #d4d4d4;  /* Primary text color - light grey */
+    --text-color-secondary: #ffffff;/* For important text like logos or headers */
+    --border-color: #333333;        /* Default border for panels */
+    --accent-border-color: var(--accent-purple); /* Purple border for accents */
+    --user-message-bg: #3a3d40;    /* Background for user messages */
+    --jarules-message-bg: #2a2d30; /* Background for JaRules messages */
+    --input-bg: #333333; /* Background for input fields */
+}
+
+body {
+    background-color: var(--dark-bg-primary);
+    color: var(--text-color-primary);
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full viewport height */
+    overflow: hidden; /* Prevent body scrollbars, main content will handle overflow */
+}
+
+header {
+    background-color: var(--dark-bg-secondary);
+    padding: 10px 20px; /* Vertical padding 10px, horizontal 20px */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color); /* Subtle border */
+    height: 50px; /* Fixed header height */
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.logo {
+    font-weight: bold;
+    color: var(--accent-purple); /* Using purple for the logo text */
+    font-size: 1.2em;
+}
+
+.user-settings {
+    font-size: 0.9em;
+    color: var(--text-color-primary);
+}
+
+main {
+    display: flex;
+    flex-grow: 1; /* Allows main to take up remaining space after header */
+    overflow: hidden; /* Panels will manage their own scrolling */
+}
+
+.panel {
+    background-color: var(--dark-bg-tertiary);
+    border: 1px solid var(--border-color); /* Default border for all panels */
+    margin: 5px; /* Small margin around panels */
+    display: flex; /* Make panels flex containers for their content if needed */
+    flex-direction: column; /* Stack content vertically within panels */
+    overflow-y: auto; /* Allow vertical scrolling within panels if content overflows */
+}
+
+/* Panel Layout & Sizing (Flexbox) */
+#chatHistoryPanel {
+    width: 250px; /* Fixed width for left sidebar */
+    border-right: 1px solid var(--accent-border-color); /* Purple accent border */
+    flex-shrink: 0; /* Prevent from shrinking */
+    padding: 10px; /* Adjusted padding for chat messages */
+}
+
+#activeChatPanel {
+    flex-grow: 3; /* Takes 3 parts of available space in the central area */
+    padding: 0; /* Remove padding to allow internal elements to control it */
+    display: flex; /* Already column from .panel, but explicit for clarity */
+    flex-direction: column;
+}
+
+#fileViewerPanel {
+    flex-grow: 2; /* Takes 2 parts of available space in the central area */
+    border-left: 1px solid var(--border-color); /* Standard border between chat and file viewer */
+    padding: 0; /* Remove padding to allow <pre> to control it for Prism */
+}
+
+#fileExplorerPanel {
+    width: 250px; /* Fixed width for right sidebar */
+    border-left: 1px solid var(--accent-border-color); /* Purple accent border */
+    flex-shrink: 0; /* Prevent from shrinking */
+    padding: 5px 15px 15px 15px; /* Adjusted padding */
+}
+
+/* Example for placeholder text styling within panels (optional) */
+.panel p {
+    color: var(--text-color-primary);
+    font-style: italic;
+    text-align: center;
+    margin-top: 20px;
+}
+
+/* Ensure main content area itself doesn't show scrollbars if panels are too wide/tall */
+main > * {
+  max-height: calc(100vh - 50px - 10px); /* Header height and main margin */
+}
+
+/* File Explorer Specific Styles */
+#fileExplorerPanel ul {
+    list-style-type: none; 
+    padding-left: 0; 
+}
+
+#fileExplorerPanel li {
+    padding: 4px 0; 
+    cursor: pointer;
+    user-select: none; 
+}
+
+#fileExplorerPanel li:hover {
+    background-color: var(--dark-bg-secondary); 
+}
+
+.file-item {
+    color: var(--text-color-primary);
+}
+
+.dir-item {
+    font-weight: bold; 
+    color: var(--text-color-secondary); 
+}
+
+.hidden {
+    display: none;
+}
+
+/* Styles for file viewer content with Prism.js */
+#fileViewerPanel pre[class*="language-"] {
+    background-color: transparent !important; 
+    margin: 0; 
+    padding: 1em; 
+    border-radius: 0; 
+    height: 100%; 
+    overflow: auto; 
+    box-sizing: border-box;
+}
+
+#fileViewerPanel pre[class*="language-"] code[class*="language-"] {
+    display: block; 
+    min-height: 100%;
+}
+
+/* Chat Message Styles (used by both Chat History and Active Chat) */
+.chat-message {
+    padding: 8px;
+    margin-bottom: 8px; 
+    border-radius: 4px;
+    line-height: 1.4; 
+}
+
+.user-message {
+    background-color: var(--user-message-bg); 
+    text-align: left; 
+}
+
+.jarules-message {
+    background-color: var(--jarules-message-bg); 
+    text-align: left;
+}
+
+.speaker {
+    font-weight: bold;
+    margin-right: 8px; 
+    color: var(--accent-purple); 
+}
+
+.message-text {
+    /* Default text color is inherited, which is good */
+}
+
+/* Active Chat Panel Specific Styles */
+#messageDisplayArea {
+    flex-grow: 1; /* Takes up available space */
+    overflow-y: auto; /* For scrolling messages */
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color); /* Separator from input area */
+}
+
+.chat-input-area {
+    display: flex;
+    padding: 10px;
+    /* border-top: 1px solid var(--border-color); No need, #messageDisplayArea has bottom border */
+    flex-shrink: 0; /* Prevent input area from shrinking */
+}
+
+#chatInput {
+    flex-grow: 1;
+    padding: 8px 10px; /* Adjusted padding */
+    border: 1px solid var(--border-color); /* Using theme border color */
+    background-color: var(--input-bg); 
+    color: var(--text-color-primary);
+    border-radius: 3px;
+    font-size: 1em;
+}
+
+#chatInput:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 1px var(--accent-purple);
+}
+
+#sendButton {
+    padding: 8px 15px;
+    margin-left: 10px;
+    background-color: var(--accent-purple);
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 1em;
+    font-weight: bold;
+}
+
+#sendButton:hover {
+    opacity: 0.9;
+}
+```

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JaRules Agent</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="vendor/prism/prism-okaidia.min.css"> {/* Prism.js Theme */}
+</head>
+<body>
+    <header>
+        <div class="logo">JaRules Logo</div>
+        <nav class="user-settings">Settings | User</nav>
+    </header>
+    <main>
+        <aside id="chatHistoryPanel" class="panel">Chat History</aside>
+        <section id="activeChatPanel" class="panel">
+            <div id="messageDisplayArea" class="chat-display">
+                <!-- Messages will be appended here by active_chat.js -->
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Type your message to JaRules...">
+                <button id="sendButton">Send</button>
+            </div>
+        </section>
+        <section id="fileViewerPanel" class="panel">File Viewer</section> {/* Content will be dynamic */}
+        <aside id="fileExplorerPanel" class="panel">File Explorer</aside> {/* Content from file_explorer.js */}
+    </main>
+
+    {/* Prism.js Core and Autoloader */}
+    <script src="vendor/prism/prism.min.js" defer></script>
+    <script>
+        // Configure Prism Autoloader path
+        // This needs to be set BEFORE prism-autoloader.js is loaded.
+        if (typeof Prism !== 'undefined' && Prism.plugins && Prism.plugins.autoloader) {
+            Prism.plugins.autoloader.languages_path = 'vendor/prism/components/';
+        } else {
+            // Fallback or error handling if Prism core didn't load
+            console.warn('Prism core or plugins.autoloader not found. Autoloader path not set.');
+            // Attempt to set it on a global Prism object anyway if it might load later,
+            // though this is less reliable.
+            window.Prism = window.Prism || {};
+            window.Prism.plugins = window.Prism.plugins || {};
+            window.Prism.plugins.autoloader = window.Prism.plugins.autoloader || {};
+            window.Prism.plugins.autoloader.languages_path = 'vendor/prism/components/';
+        }
+    </script>
+    <script src="vendor/prism/prism-autoloader.min.js" defer></script>
+
+    {/* Custom JavaScript files */}
+    <script src="file_explorer.js" defer></script>
+    <script src="file_viewer.js" defer></script> 
+    <script src="chat_history.js" defer></script>
+    <script src="active_chat.js" defer></script>
+</body>
+</html>
