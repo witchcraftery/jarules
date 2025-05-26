@@ -27,8 +27,13 @@ JaRules is an asynchronous development assistant designed to streamline your sof
     *   Read file content (`read <path>`).
     *   Write content to files (`write <path> <content>`).
 *   **GitHub Connector (`jarules_agent/connectors/github_connector.py`):**
-    *   List files in public repositories (`gh_ls <owner>/<repo>[/<path>]`).
-    *   Read file content from public repositories (`gh_read <owner>/<repo>/<file_path>`).
+    *   **Read Operations:**
+        *   `list_repo_files(owner, repo, path)`: Lists files and directories in a repository path.
+        *   `read_repo_file(owner, repo, file_path)`: Reads the content of a file from a repository.
+    *   **Write Operations (New! 🎉):**
+        *   `create_branch(owner, repo, new_branch_name, source_branch_name)`: Creates a new branch from a source branch.
+        *   `commit_files(owner, repo, branch_name, file_changes, commit_message)`: Commits one or more file changes (specified by path and content) to a branch.
+        *   `create_pull_request(owner, repo, head_branch, base_branch, title, body)`: Creates a new pull request.
 *   **AI API Placeholder (`jarules_agent/connectors/gemini_api.py`):** Basic structure for future Gemini integration.
 *   **Command-Line Interface (`jarules_agent/ui/cli.py`):** Your current way to interact with JaRules!
 *   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls.
