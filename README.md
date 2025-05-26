@@ -27,12 +27,22 @@ JaRules is an asynchronous development assistant designed to streamline your sof
     *   Read file content (`read <path>`).
     *   Write content to files (`write <path> <content>`).
 *   **GitHub Connector (`jarules_agent/connectors/github_connector.py`):**
-    *   List files in public repositories (`gh_ls <owner>/<repo>[/<path>]`).
-    *   Read file content from public repositories (`gh_read <owner>/<repo>/<file_path>`).
-*   **AI API Placeholder (`jarules_agent/connectors/gemini_api.py`):** Basic structure for future Gemini integration.
+    *   **Read Operations:**
+        *   `list_repo_files(owner, repo, path)`: Lists files and directories in a repository path.
+        *   `read_repo_file(owner, repo, file_path)`: Reads the content of a file from a repository.
+    *   **Write Operations (New! 🎉):**
+        *   `create_branch(owner, repo, new_branch_name, source_branch_name)`: Creates a new branch from a source branch.
+        *   `commit_files(owner, repo, branch_name, file_changes, commit_message)`: Commits one or more file changes (specified by path and content) to a branch.
+        *   `create_pull_request(owner, repo, head_branch, base_branch, title, body)`: Creates a new pull request.
+*   **Gemini API Connector (`jarules_agent/connectors/gemini_api.py`) (New! 🧠):**
+    *   `GeminiClient` initialized with `GEMINI_API_KEY` from environment variables.
+    *   Core functionalities implemented:
+        *   `generate_code(user_prompt, system_instruction)`: Generates code based on a user prompt and optional system instructions.
+        *   `explain_code(code_snippet, system_instruction)`: Explains a given code snippet.
+        *   `suggest_code_modification(code_snippet, issue_description, system_instruction)`: Suggests modifications to a code snippet based on an issue description.
 *   **Command-Line Interface (`jarules_agent/ui/cli.py`):** Your current way to interact with JaRules!
-*   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls.
-*   **Unit Tests (`jarules_agent/tests/`):** Ensuring `local_files.py` and `github_connector.py` are reliable. We even caught a bug with tests! 🐞➡️✅
+*   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls, `google-generativeai` for Gemini integration.
+*   **Unit Tests (`jarules_agent/tests/`):** Ensuring `local_files.py`, `github_connector.py`, and `gemini_api.py` are reliable. We even caught a bug with tests! 🐞➡️✅
 
 ## How to Run JaRules (CLI)
 
@@ -56,7 +66,47 @@ JaRules is an asynchronous development assistant designed to streamline your sof
 
 ## Next Steps (The Road Ahead 🚀)
 
-*   Implementing GitHub write operations (creating commits, branches, PRs).
-*   Full integration with the Gemini API for code generation and assistance.
-*   Expanding AI connector capabilities.
-*   Developing the chat interface.
+The vision for JaRules is rapidly taking shape! Recent planning has laid a detailed groundwork for several key areas. We're excited to move towards implementation:
+
+*   **Implementing GitHub Write Operations:**
+    *   **Goal:** Enable JaRules to actively manage GitHub repositories.
+    *   **Planned Features:**
+        *   Create new branches (e.g., for features, fixes).
+        *   Commit one or more files with appropriate messages.
+        *   Create pull requests to propose changes.
+    *   **Details:** Method signatures in `github_connector.py` and new test cases have been outlined.
+
+*   **Full Integration with the Gemini API:**
+    *   **Goal:** Leverage Google's Gemini models for advanced AI-powered development assistance.
+    *   **Planned Features:**
+        *   **Code Generation:** Generate code from natural language prompts.
+        *   **Interactive Code Refinement/Bug Fixing:** Suggest improvements and fixes for existing code.
+        *   **Contextual Code Explanation:** Explain code snippets in natural language.
+    *   **Details:** The API contract in `gemini_api.py` (including `generate_code`, `explain_code`, `suggest_code_modification`), API key management (via `GEMINI_API_KEY` environment variable), and comprehensive unit tests are now implemented.
+    *   **Planned CLI Integration:** Design for integrating these AI capabilities into the CLI is complete. Upcoming work will focus on implementing commands such as:
+        *   `ai gencode "<prompt>"`
+        *   `ai explain "<code>"` and `ai explain_file <filepath> [start_line:end_line]`
+        *   `ai suggest_fix "<code>" "<issue>"` and `ai suggest_fix_file <filepath> "<issue>" [start_line:end_line]`
+
+*   **Expanding AI Connector Capabilities (Multi-LLM Support):**
+    *   **Goal:** Make JaRules flexible by supporting various AI models, both cloud-based and local.
+    *   **Planned Architecture:**
+        *   A `BaseLLMConnector` abstract base class will define a common interface for all AI connectors.
+        *   Initial focus on adapting `GeminiClient` to this interface.
+        *   Future plans include connectors for Ollama (to run local models like CodeLlama, Llama 3, Mistral), Anthropic Claude, and potentially other specialized coding LLM APIs.
+        *   The core agent will manage these connectors through a factory pattern and configuration settings.
+    *   **Details:** The base class methods (e.g., `send_prompt`, `generate_code`, `explain_text`) and configuration management have been outlined.
+
+*   **Developing the Chat User Interface (Electron App):**
+    *   **Goal:** Create an intuitive and interactive desktop application for JaRules.
+    *   **Technology:** Confirmed use of Electron, with Svelte or Vue.js recommended for the frontend.
+    *   **Planned Features (Initial):**
+        *   Message display area, multi-line text input, send button.
+        *   Clear display of user inputs and agent responses (including syntax-highlighted code blocks with a copy function).
+        *   Loading indicators for agent processing.
+    *   **Communication Protocol:** IPC (Inter-Process Communication) between the Electron UI (renderer process) and the Python agent core (via Electron main process), using JSON messages.
+
+*   **Towards an Implementation Guide:**
+    *   Given the detailed planning, we are considering the development of a more comprehensive "Implementation Guide" or a series of focused development tasks to help contributors dive into these areas. Stay tuned for more details!
+
+We're building a powerful assistant, and these next steps are crucial in bringing that vision to life. Contributions and feedback are welcome!
