@@ -34,10 +34,15 @@ JaRules is an asynchronous development assistant designed to streamline your sof
         *   `create_branch(owner, repo, new_branch_name, source_branch_name)`: Creates a new branch from a source branch.
         *   `commit_files(owner, repo, branch_name, file_changes, commit_message)`: Commits one or more file changes (specified by path and content) to a branch.
         *   `create_pull_request(owner, repo, head_branch, base_branch, title, body)`: Creates a new pull request.
-*   **AI API Placeholder (`jarules_agent/connectors/gemini_api.py`):** Basic structure for future Gemini integration.
+*   **Gemini API Connector (`jarules_agent/connectors/gemini_api.py`) (New! 🧠):**
+    *   `GeminiClient` initialized with `GEMINI_API_KEY` from environment variables.
+    *   Core functionalities implemented:
+        *   `generate_code(user_prompt, system_instruction)`: Generates code based on a user prompt and optional system instructions.
+        *   `explain_code(code_snippet, system_instruction)`: Explains a given code snippet.
+        *   `suggest_code_modification(code_snippet, issue_description, system_instruction)`: Suggests modifications to a code snippet based on an issue description.
 *   **Command-Line Interface (`jarules_agent/ui/cli.py`):** Your current way to interact with JaRules!
-*   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls.
-*   **Unit Tests (`jarules_agent/tests/`):** Ensuring `local_files.py` and `github_connector.py` are reliable. We even caught a bug with tests! 🐞➡️✅
+*   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls, `google-generativeai` for Gemini integration.
+*   **Unit Tests (`jarules_agent/tests/`):** Ensuring `local_files.py`, `github_connector.py`, and `gemini_api.py` are reliable. We even caught a bug with tests! 🐞➡️✅
 
 ## How to Run JaRules (CLI)
 
@@ -77,7 +82,11 @@ The vision for JaRules is rapidly taking shape! Recent planning has laid a detai
         *   **Code Generation:** Generate code from natural language prompts.
         *   **Interactive Code Refinement/Bug Fixing:** Suggest improvements and fixes for existing code.
         *   **Contextual Code Explanation:** Explain code snippets in natural language.
-    *   **Details:** The API contract in `gemini_api.py`, API key management (via `GEMINI_API_KEY` environment variable), interaction with core agent logic, and specific test cases are planned.
+    *   **Details:** The API contract in `gemini_api.py` (including `generate_code`, `explain_code`, `suggest_code_modification`), API key management (via `GEMINI_API_KEY` environment variable), and comprehensive unit tests are now implemented.
+    *   **Planned CLI Integration:** Design for integrating these AI capabilities into the CLI is complete. Upcoming work will focus on implementing commands such as:
+        *   `ai gencode "<prompt>"`
+        *   `ai explain "<code>"` and `ai explain_file <filepath> [start_line:end_line]`
+        *   `ai suggest_fix "<code>" "<issue>"` and `ai suggest_fix_file <filepath> "<issue>" [start_line:end_line]`
 
 *   **Expanding AI Connector Capabilities (Multi-LLM Support):**
     *   **Goal:** Make JaRules flexible by supporting various AI models, both cloud-based and local.
