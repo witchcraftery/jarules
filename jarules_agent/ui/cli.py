@@ -23,6 +23,7 @@ except ModuleNotFoundError:
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     from connectors import local_files
     from connectors import github_connector # Added for GitHubClient
+    from connectors.gemini_api import GeminiClient, GeminiApiKeyError, GeminiCodeGenerationError, GeminiApiError, GeminiExplanationError, GeminiModificationError
 
 
 def display_help():
@@ -38,6 +39,12 @@ def display_help():
     print("                                   Example: gh_ls octocat/Hello-World/docs")
     print("    gh_read <owner>/<repo>/<file_path> - Reads a file from a GitHub repository.")
     print("                                   Example: gh_read octocat/Hello-World/README.md")
+    print("\n  AI:")
+    print("    ai gencode \"<prompt_text>\"   - Generates code based on the provided prompt.")
+    print("    ai explain \"<code_snippet>\"  - Explains the provided code snippet.")
+    print("    ai explain_file <filepath>   - Explains the content of the specified file.")
+    print("    ai suggest_fix \"<code_snippet>\" \"<issue>\" - Suggests a fix for the code snippet based on the issue.")
+    print("    ai suggest_fix_file <filepath> \"<issue>\" - Suggests a fix for the file content based on the issue.")
     print("\n  General:")
     print("    help                         - Prints this list of available commands.")
     print("    exit / quit                  - Exits the CLI.\n")
@@ -47,6 +54,15 @@ def run_cli():
     print("Welcome to JaRules CLI!")
     # Instantiate GitHubClient (can be configured with a token later if needed)
     github_client = github_connector.GitHubClient()
+
+    # Instantiate GeminiClient
+    try:
+        gemini_client = GeminiClient()
+        print("Gemini Client initialized successfully.") # Optional: for confirmation
+    except GeminiApiKeyError as e:
+        print(f"Error: {e} AI features will be unavailable. Please set the GEMINI_API_KEY environment variable.")
+        return # Exit CLI if API key is not found
+
     display_help()
 
     while True:
@@ -152,6 +168,130 @@ def run_cli():
                         print("Usage: gh_read <owner>/<repo>/<file_path>")
                 else:
                     print("Usage: gh_read <owner>/<repo>/<file_path>")
+            elif command == "ai" and args and args[0].lower() == "gencode":
+                if len(args) > 1:
+                    prompt_string = " ".join(args[1:])
+                    try:
+                        print(f"Generating code for prompt: \"{prompt_string}\"...")
+                        # Ensure gemini_client is available (initialized at startup)
+                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
+                             print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        else:
+                            generated_code = gemini_client.generate_code(prompt_string)
+                            if generated_code:
+                                print("\n--- Generated Code ---")
+                                print(generated_code)
+                                print("--- End of Generated Code ---")
+                            else:
+                                print("No code generated, or the response was empty.")
+                    except GeminiCodeGenerationError as e:
+                        print(f"Error generating code: {e}")
+                    except GeminiApiError as e:
+                        print(f"API Error: {e}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred during code generation: {e}")
+                else:
+                    print("Usage: ai gencode \"<prompt_text>\"")
+            elif command == "ai" and args and args[0].lower() == "explain":
+                if len(args) > 1:
+                    code_snippet = " ".join(args[1:])
+                    try:
+                        print(f"Explaining code snippet: \"{code_snippet[:50]}...\"")
+                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
+                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        else:
+                            explanation = gemini_client.explain_code(code_snippet)
+                            if explanation:
+                                print("\n--- Code Explanation ---")
+                                print(explanation)
+                                print("--- End of Explanation ---")
+                            else:
+                                print("No explanation generated or the response was empty.")
+                    except GeminiExplanationError as e:
+                        print(f"Error explaining code: {e}")
+                    except GeminiApiError as e:
+                        print(f"API Error: {e}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred during code explanation: {e}")
+                else:
+                    print("Usage: ai explain \"<code_snippet>\"")
+            elif command == "ai" and args and args[0].lower() == "explain_file":
+                if len(args) == 2:
+                    file_path = args[1]
+                    try:
+                        print(f"Explaining file: \"{file_path}\"...")
+                        code_content = local_files.read_file(file_path)
+                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
+                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        else:
+                            explanation = gemini_client.explain_code(code_content)
+                            if explanation:
+                                print("\n--- Code Explanation ---")
+                                print(explanation)
+                                print("--- End of Explanation ---")
+                            else:
+                                print("No explanation generated or the response was empty.")
+                    except FileNotFoundError:
+                        print(f"Error: File not found: {file_path}")
+                    except GeminiExplanationError as e:
+                        print(f"Error explaining code from file: {e}")
+                    except GeminiApiError as e:
+                        print(f"API Error: {e}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred during file explanation: {e}")
+                else:
+                    print("Usage: ai explain_file <filepath>")
+            elif command == "ai" and args and args[0].lower() == "suggest_fix":
+                if len(args) == 2: # Expecting code snippet and issue description as two separate arguments
+                    code_snippet = args[0]
+                    issue_description = args[1]
+                    try:
+                        print(f"Suggesting fix for code snippet: \"{code_snippet[:50]}...\" based on issue: \"{issue_description[:50]}...\"")
+                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
+                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        else:
+                            suggestion = gemini_client.suggest_code_modification(code_snippet, issue_description)
+                            if suggestion:
+                                print("\n--- Suggested Fix ---")
+                                print(suggestion)
+                                print("--- End of Suggestion ---")
+                            else:
+                                print("No code modification suggested or the response was empty.")
+                    except GeminiModificationError as e:
+                        print(f"Error suggesting fix: {e}")
+                    except GeminiApiError as e:
+                        print(f"API Error: {e}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred while suggesting fix: {e}")
+                else:
+                    print("Usage: ai suggest_fix \"<code_snippet>\" \"<issue_description>\"")
+            elif command == "ai" and args and args[0].lower() == "suggest_fix_file":
+                if len(args) >= 2: # Expecting filepath and at least one word for issue description
+                    file_path = args[0]
+                    issue_description = " ".join(args[1:])
+                    try:
+                        print(f"Suggesting fix for file: \"{file_path}\" based on issue: \"{issue_description[:50]}...\"")
+                        code_content = local_files.read_file(file_path)
+                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
+                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        else:
+                            suggestion = gemini_client.suggest_code_modification(code_content, issue_description)
+                            if suggestion:
+                                print("\n--- Suggested Fix ---")
+                                print(suggestion)
+                                print("--- End of Suggestion ---")
+                            else:
+                                print("No code modification suggested or the response was empty.")
+                    except FileNotFoundError:
+                        print(f"Error: File not found: {file_path}")
+                    except GeminiModificationError as e:
+                        print(f"Error suggesting fix for file: {e}")
+                    except GeminiApiError as e:
+                        print(f"API Error: {e}")
+                    except Exception as e:
+                        print(f"An unexpected error occurred while suggesting fix for file: {e}")
+                else:
+                    print("Usage: ai suggest_fix_file <filepath> \"<issue_description>\"")
             else:
                 print(f"Unknown command: '{command}'. Type 'help' for available commands.")
 
