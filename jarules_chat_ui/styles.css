@@ -1,0 +1,44 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: #f4f4f4;
+}
+
+#messages-container {
+    flex-grow: 1; /* Takes up available space */
+    overflow-y: auto; /* Scrollable if content overflows */
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+}
+
+#input-container {
+    display: flex; /* Align textarea and button in a row */
+    padding: 10px;
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+}
+
+#message-input {
+    flex-grow: 1; /* Takes up available space in the flex row */
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    resize: none; /* Disable manual resizing by user */
+    min-height: 20px; /* Start small, can grow with content or JS */
+    margin-right: 10px;
+}
+
+#send-button {
+    padding: 8px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#send-button:hover {
+    background-color: #0056b3;
+}
