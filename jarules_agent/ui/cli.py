@@ -3,12 +3,16 @@
 import sys
 # Correcting the import path assuming jarules_agent is in PYTHONPATH
 # or the script is run from the directory containing jarules_agent.
+import os # Ensure os is imported if used in fallback
 try:
     from jarules_agent.connectors import local_files
+    from jarules_agent.connectors import github_connector # Added for GitHubClient
+    from jarules_agent.connectors.gemini_api import GeminiApiKeyError, GeminiCodeGenerationError, GeminiApiError, GeminiExplanationError, GeminiModificationError 
+    from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
+    from jarules_agent.connectors.base_llm_connector import LLMConnectorError # To catch broader LLM errors
 except ModuleNotFoundError:
     # Fallback for direct execution if jarules_agent is not in PYTHONPATH
     # This assumes the script might be run from jarules_agent/ui or similar
-    import os
     # Add parent directory of 'jarules_agent' to sys.path if 'jarules_agent' itself is not directly in sys.path
     # This is a bit complex because the structure is /app/jarules_agent/...
     # If we are in /app/jarules_agent/ui, then ../../ needs to be added for 'from jarules_agent...' to work
@@ -20,13 +24,16 @@ except ModuleNotFoundError:
     # The above line would be for running cli.py directly from its own directory.
     # Given the tool structure, a direct import should ideally work.
     # Let's try a simpler relative import path if the primary fails.
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    from connectors import local_files
-    from connectors import github_connector # Added for GitHubClient
-    # Import specific Gemini errors that are caught in command handlers
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) # Go up to 'jarules_agent'
+    from connectors import local_files # now this becomes from jarules_agent.connectors
+    from connectors import github_connector 
     from connectors.gemini_api import GeminiApiKeyError, GeminiCodeGenerationError, GeminiApiError, GeminiExplanationError, GeminiModificationError 
-    from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
-    from jarules_agent.connectors.base_llm_connector import LLMConnectorError # To catch broader LLM errors
+    # LLMManager and related exceptions should be imported from their actual core path
+    # This fallback should primarily handle connectors if the structure is odd.
+    # However, the test error indicates LLMManager is not found by the patcher at jarules_agent.ui.cli.LLMManager
+    # So LLMManager must be imported at the top level of cli.py
+    from core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
+    from connectors.base_llm_connector import LLMConnectorError
 
 
 def display_help():
@@ -59,10 +66,11 @@ def run_cli():
     github_client = github_connector.GitHubClient()
 
     # Instantiate LLMManager and load default LLM
+    # LLMManager class should be available here due to top-level imports
     try:
         llm_manager = LLMManager(config_path='config/llm_config.yaml')
         print("LLMManager initialized successfully.")
-    except LLMConfigError as e:
+    except LLMConfigError as e: # LLMConfigError should also be available
         print(f"Error initializing LLMManager: {e}. AI features will be unavailable.")
         return 
     except Exception as e:

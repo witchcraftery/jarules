@@ -51,19 +51,26 @@ class TestCLI(unittest.TestCase):
         self.assertNotIn("LLMManager initialized successfully.", output)
         self.assertNotIn("Available commands:", output)
 
-    @patch('jarules_agent.ui.cli.GitHubClient')
-    @patch('jarules_agent.ui.cli.LLMManager')
-    def test_startup_llm_connector_api_key_error(self, MockLLMManagerClass, MockGitHubClient):
-        MockGitHubClient.return_value = MagicMock()
+    @patch('jarules_agent.ui.cli.GitHubClient') 
+    @patch('jarules_agent.ui.cli.LLMManager') 
+    def test_startup_llm_connector_error_handling(self, MockLLMManagerClass, MockGitHubClient): 
+        # Use the helper to set up GitHub mock, LLMManager mock will be used directly
+        MockGitHubClient.return_value = MagicMock() # Basic setup for GH Client
+            
         mock_llm_manager_instance = MockLLMManagerClass.return_value
-        # Simulate that get_llm_connector for the default ID raises GeminiApiKeyError
-        mock_llm_manager_instance.get_llm_connector.side_effect = lambda config_id: \
-            GeminiApiKeyError("Test Gemini API Key Error via Manager") if config_id == "gemini_flash_default" else MagicMock()
-        run_cli()
-        output = self.mock_stdout.getvalue()
-        self.assertIn("LLMManager initialized successfully.", output)
-        self.assertIn("API Key Error for LLM 'gemini_flash_default': Test Gemini API Key Error via Manager. AI features will be unavailable.", output)
+        # Simulate error during get_llm_connector call
+        # Using GeminiApiKeyError as an example, as per the original test's intent
+        mock_llm_manager_instance.get_llm_connector.side_effect = GeminiApiKeyError("Test API Key Error from LLMManager path")
+            
+        run_cli() 
+            
+        output = self.mock_stdout.getvalue() 
+        # Ensure LLMManager itself is reported as initialized before connector loading fails
+        self.assertIn("LLMManager initialized successfully.", output) 
+        self.assertIn("API Key Error for LLM 'gemini_flash_default': Test API Key Error from LLMManager path. AI features will be unavailable.", output) 
         self.assertNotIn("Successfully loaded LLM", output)
+        # Depending on CLI logic, "Available commands" might still be shown if basic CLI can run.
+        # For now, keeping original assertion if AI failure prevents further command processing display.
         self.assertNotIn("Available commands:", output)
 
     @patch('jarules_agent.ui.cli.GitHubClient')
@@ -98,14 +105,18 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Exiting JaRules CLI. Goodbye!", output)
         self.assertEqual(mock_input.call_count, 1)
 
-    def _setup_standard_mocks(self, MockLLMManagerClass, MockGitHubClientClass): # Renamed MockGitHubClient to MockGitHubClientClass
-        """Helper to set up common mocks for most tests."""
+    # Helper (if not already present or adapt existing setup for mocks)
+    def _setup_cli_mocks(self, MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=BaseLLMConnector, llm_model_name="mocked-model"):
         mock_gh_instance = MockGitHubClientClass.return_value # Use the class mock's return_value
+        MockGitHubClientClass.return_value = MagicMock() # Ensure this is a MagicMock for consistency if not already.
         
         mock_llm_manager_instance = MockLLMManagerClass.return_value
-        mock_active_llm_client = MagicMock(spec=GeminiClient) 
-        mock_active_llm_client.model_name = "mocked-gemini-model"
+        mock_active_llm_client = MagicMock(spec=llm_client_spec)
+        if llm_model_name is not None: # model_name could be None if get_llm_connector fails
+             mock_active_llm_client.model_name = llm_model_name
         mock_llm_manager_instance.get_llm_connector.return_value = mock_active_llm_client
+        # Return mock_gh_instance as well if tests need it, or adjust tests not to expect it from this helper.
+        # For now, returning it to minimize changes to test bodies.
         return mock_llm_manager_instance, mock_active_llm_client, mock_gh_instance
 
     # --- Tests for 'ls' command ---
@@ -114,7 +125,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager') 
     def test_ls_success(self, MockLLMManagerClass, MockGitHubClient, mock_list_files, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient) # Use helper
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient) # Use helper
         mock_input.side_effect = ["ls .", "exit"]
         mock_list_files.return_value = ['file1.txt', 'subdir']
         run_cli()
@@ -127,7 +138,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_ls_empty_dir(self, MockLLMManagerClass, MockGitHubClient, mock_list_files, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["ls empty_dir", "exit"]
         mock_list_files.return_value = []
         run_cli()
@@ -139,7 +150,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_ls_file_not_found(self, MockLLMManagerClass, MockGitHubClient, mock_list_files, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["ls nonexistent_path", "exit"]
         mock_list_files.side_effect = FileNotFoundError("No such file or directory")
         run_cli()
@@ -151,7 +162,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_ls_not_a_directory(self, MockLLMManagerClass, MockGitHubClient, mock_list_files, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["ls path_to_a_file", "exit"]
         mock_list_files.side_effect = NotADirectoryError("Not a directory")
         run_cli()
@@ -163,7 +174,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_ls_no_args(self, MockLLMManagerClass, MockGitHubClient, mock_list_files, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["ls", "exit"]
         run_cli()
         output = self.mock_stdout.getvalue()
@@ -176,7 +187,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_read_success(self, MockLLMManagerClass, MockGitHubClient, mock_read_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["read test.txt", "exit"]
         mock_read_file.return_value = "file content"
         run_cli()
@@ -189,7 +200,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_read_file_not_found(self, MockLLMManagerClass, MockGitHubClient, mock_read_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["read nofile.txt", "exit"]
         mock_read_file.side_effect = FileNotFoundError("File not found")
         run_cli()
@@ -201,7 +212,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_read_no_args(self, MockLLMManagerClass, MockGitHubClient, mock_read_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["read", "exit"]
         run_cli()
         output = self.mock_stdout.getvalue()
@@ -214,7 +225,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_write_success(self, MockLLMManagerClass, MockGitHubClient, mock_write_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["write output.txt Hello world", "exit"]
         run_cli()
         output = self.mock_stdout.getvalue()
@@ -226,7 +237,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_write_io_error(self, MockLLMManagerClass, MockGitHubClient, mock_write_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["write file.txt content", "exit"]
         mock_write_file.side_effect = IOError("Disk full")
         run_cli()
@@ -238,7 +249,7 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_write_no_args_or_missing_content(self, MockLLMManagerClass, MockGitHubClient, mock_write_file, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+        self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClient)
         mock_input.side_effect = ["write", "exit"]
         run_cli()
         self.assertIn("Usage: write <file_path> <content>", self.mock_stdout.getvalue())
@@ -252,15 +263,23 @@ class TestCLI(unittest.TestCase):
     @patch('builtins.input')
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
-    def test_ai_gencode_success(self, MockLLMManagerClass, MockGitHubClient, mock_input):
-        _, mock_active_llm_client, _ = self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
-        mock_active_llm_client.generate_code.return_value = "def hello():\n  print('Hello World')"
-        mock_input.side_effect = ["ai gencode \"create a hello world function in python\"", "exit"]
-        run_cli()
+    def test_ai_gencode_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_input): # Renamed MockGitHubClient to MockGitHubClientClass
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient, llm_model_name="mocked-gemini-model"
+        )
+            
+        mock_llm_client.generate_code.return_value = "def hello():\n  print('Hello Manager')" # Matched guide
+        mock_input.side_effect = ["ai gencode \"python hello\"", "exit"] # User input from guide
+            
+        run_cli() # Run the CLI main loop
+            
         output = self.mock_stdout.getvalue()
-        MockLLMManagerClass.return_value.get_llm_connector.assert_called_once_with("gemini_flash_default")
-        mock_active_llm_client.generate_code.assert_called_once_with("create a hello world function in python")
+        # Check that LLMManager was asked for the default connector
+        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
+        # Check that the connector's method was called
+        mock_llm_client.generate_code.assert_called_once_with("python hello") # Matched guide
         self.assertIn("--- Generated Code ---", output)
+        self.assertIn("def hello():\n  print('Hello Manager')", output) # Matched guide
 
     @patch('builtins.input')
     @patch('jarules_agent.ui.cli.GitHubClient')
@@ -273,62 +292,345 @@ class TestCLI(unittest.TestCase):
         run_cli()
         output = self.mock_stdout.getvalue()
         self.assertIn("AI client not available. Please check configuration.", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_gencode_empty_result(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.generate_code.return_value = ""
+        mock_input.side_effect = ["ai gencode \"a prompt\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.generate_code.assert_called_once_with("a prompt")
+        self.assertIn("No code generated.", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_gencode_api_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.generate_code.side_effect = GeminiApiError("Test API Error")
+        mock_input.side_effect = ["ai gencode \"a prompt\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.generate_code.assert_called_once_with("a prompt")
+        self.assertIn("Error generating code: Test API Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_gencode_generation_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.generate_code.side_effect = GeminiCodeGenerationError("Test Generation Error")
+        mock_input.side_effect = ["ai gencode \"a prompt\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.generate_code.assert_called_once_with("a prompt")
+        self.assertIn("Error generating code: Test Generation Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_gencode_no_prompt(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_input.side_effect = ["ai gencode", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai gencode <prompt>", output)
+        mock_llm_client.generate_code.assert_not_called()
         
     @patch('builtins.input')
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
-    def test_ai_explain_success(self, MockLLMManagerClass, MockGitHubClient, mock_input):
-        _, mock_active_llm_client, _ = self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
-        mock_active_llm_client.explain_code.return_value = "This code does amazing things."
+    def test_ai_explain_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_input): # Renamed MockGitHubClient to MockGitHubClientClass
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient, llm_model_name="mocked-gemini-model"
+        )
+        mock_llm_client.explain_code.return_value = "This code does amazing things."
         mock_input.side_effect = ["ai explain \"def foo(): pass\"", "exit"]
         run_cli()
-        mock_active_llm_client.explain_code.assert_called_once_with("def foo(): pass")
+        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
+        mock_llm_client.explain_code.assert_called_once_with("def foo(): pass")
         self.assertIn("--- Code Explanation ---", self.mock_stdout.getvalue())
+        self.assertIn("This code does amazing things.", self.mock_stdout.getvalue())
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_empty_result(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.explain_code.return_value = None
+        mock_input.side_effect = ["ai explain \"code snippet\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.explain_code.assert_called_once_with("code snippet")
+        self.assertIn("No explanation provided.", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_api_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.explain_code.side_effect = GeminiApiError("Test API Error")
+        mock_input.side_effect = ["ai explain \"code snippet\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.explain_code.assert_called_once_with("code snippet")
+        self.assertIn("Error explaining code: Test API Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_explanation_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.explain_code.side_effect = GeminiExplanationError("Test Explanation Error")
+        mock_input.side_effect = ["ai explain \"code snippet\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.explain_code.assert_called_once_with("code snippet")
+        self.assertIn("Error explaining code: Test Explanation Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_no_snippet(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_input.side_effect = ["ai explain", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai explain <code_snippet>", output)
+        mock_llm_client.explain_code.assert_not_called()
 
     @patch('builtins.input')
     @patch('jarules_agent.connectors.local_files.read_file')
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
-    def test_ai_explain_file_success(self, MockLLMManagerClass, MockGitHubClient, mock_local_read_file, mock_input):
-        _, mock_active_llm_client, _ = self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+    def test_ai_explain_file_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input): # Renamed MockGitHubClient to MockGitHubClientClass
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient, llm_model_name="mocked-gemini-model"
+        )
         mock_local_read_file.return_value = "content from file"
-        mock_active_llm_client.explain_code.return_value = "file explanation"
+        mock_llm_client.explain_code.return_value = "file explanation"
         mock_input.side_effect = ["ai explain_file test.py", "exit"]
         run_cli()
-        mock_active_llm_client.explain_code.assert_called_once_with("content from file")
+        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
+        mock_local_read_file.assert_called_once_with("test.py")
+        mock_llm_client.explain_code.assert_called_once_with("content from file")
         self.assertIn("--- Code Explanation ---", self.mock_stdout.getvalue())
-
-    @patch('builtins.input')
-    @patch('jarules_agent.ui.cli.GitHubClient')
-    @patch('jarules_agent.ui.cli.LLMManager')
-    def test_ai_suggest_fix_success(self, MockLLMManagerClass, MockGitHubClient, mock_input):
-        _, mock_active_llm_client, _ = self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
-        mock_active_llm_client.suggest_code_modification.return_value = "fixed code here"
-        mock_input.side_effect = ["ai suggest_fix \"def main(): bug()\" \"fix this bug\"", "exit"]
-        run_cli()
-        mock_active_llm_client.suggest_code_modification.assert_called_once_with("def main(): bug()", "fix this bug")
-        self.assertIn("--- Suggested Fix ---", self.mock_stdout.getvalue())
+        self.assertIn("file explanation", self.mock_stdout.getvalue())
 
     @patch('builtins.input')
     @patch('jarules_agent.connectors.local_files.read_file')
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
-    def test_ai_suggest_fix_file_success(self, MockLLMManagerClass, MockGitHubClient, mock_local_read_file, mock_input):
-        _, mock_active_llm_client, _ = self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClient)
+    def test_ai_explain_file_read_not_found(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_local_read_file.side_effect = FileNotFoundError("File not found")
+        mock_input.side_effect = ["ai explain_file nofile.py", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_local_read_file.assert_called_once_with("nofile.py")
+        self.assertIn("Error reading file nofile.py: File not found", output)
+        mock_llm_client.explain_code.assert_not_called()
+
+    @patch('builtins.input')
+    @patch('jarules_agent.connectors.local_files.read_file')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_file_api_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_local_read_file.return_value = "file content"
+        mock_llm_client.explain_code.side_effect = GeminiApiError("Test API Error")
+        mock_input.side_effect = ["ai explain_file test.py", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_local_read_file.assert_called_once_with("test.py")
+        mock_llm_client.explain_code.assert_called_once_with("file content")
+        self.assertIn("Error explaining code: Test API Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_explain_file_no_path(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_input.side_effect = ["ai explain_file", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai explain_file <file_path>", output)
+        mock_llm_client.explain_code.assert_not_called()
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_input): # Renamed MockGitHubClient to MockGitHubClientClass
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient, llm_model_name="mocked-gemini-model"
+        )
+        mock_llm_client.suggest_code_modification.return_value = "fixed code here"
+        mock_input.side_effect = ["ai suggest_fix \"def main(): bug()\" \"fix this bug\"", "exit"]
+        run_cli()
+        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
+        mock_llm_client.suggest_code_modification.assert_called_once_with("def main(): bug()", "fix this bug")
+        self.assertIn("--- Suggested Fix ---", self.mock_stdout.getvalue())
+        self.assertIn("fixed code here", self.mock_stdout.getvalue())
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_empty_result(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.suggest_code_modification.return_value = ""
+        mock_input.side_effect = ["ai suggest_fix \"code\" \"issue\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.suggest_code_modification.assert_called_once_with("code", "issue")
+        self.assertIn("No fix suggested.", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_api_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.suggest_code_modification.side_effect = GeminiApiError("Test API Error")
+        mock_input.side_effect = ["ai suggest_fix \"code\" \"issue\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.suggest_code_modification.assert_called_once_with("code", "issue")
+        self.assertIn("Error suggesting fix: Test API Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_modification_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_llm_client.suggest_code_modification.side_effect = GeminiModificationError("Test Mod Error")
+        mock_input.side_effect = ["ai suggest_fix \"code\" \"issue\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_llm_client.suggest_code_modification.assert_called_once_with("code", "issue")
+        self.assertIn("Error suggesting fix: Test Mod Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_not_enough_args(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_input.side_effect = ["ai suggest_fix \"codeonly\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai suggest_fix <code_snippet> <issue_description>", output)
+        mock_llm_client.suggest_code_modification.assert_not_called()
+
+    @patch('builtins.input')
+    @patch('jarules_agent.connectors.local_files.read_file')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_file_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input): # Renamed MockGitHubClient to MockGitHubClientClass
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient, llm_model_name="mocked-gemini-model"
+        )
         mock_local_read_file.return_value = "file content for fix"
-        mock_active_llm_client.suggest_code_modification.return_value = "fixed file content"
+        mock_llm_client.suggest_code_modification.return_value = "fixed file content"
         mock_input.side_effect = ["ai suggest_fix_file test.py \"fix this file\"", "exit"]
         run_cli()
-        mock_active_llm_client.suggest_code_modification.assert_called_once_with("file content for fix", "fix this file")
+        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
+        mock_local_read_file.assert_called_once_with("test.py")
+        mock_llm_client.suggest_code_modification.assert_called_once_with("file content for fix", "fix this file")
         self.assertIn("--- Suggested Fix ---", self.mock_stdout.getvalue())
+        self.assertIn("fixed file content", self.mock_stdout.getvalue())
+
+    @patch('builtins.input')
+    @patch('jarules_agent.connectors.local_files.read_file')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_file_read_not_found(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_local_read_file.side_effect = FileNotFoundError("File not found")
+        mock_input.side_effect = ["ai suggest_fix_file nofile.py \"issue\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_local_read_file.assert_called_once_with("nofile.py")
+        self.assertIn("Error reading file nofile.py: File not found", output)
+        mock_llm_client.suggest_code_modification.assert_not_called()
+
+    @patch('builtins.input')
+    @patch('jarules_agent.connectors.local_files.read_file')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_file_api_error(self, MockLLMManagerClass, MockGitHubClientClass, mock_local_read_file, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_local_read_file.return_value = "file content"
+        mock_llm_client.suggest_code_modification.side_effect = GeminiApiError("Test API Error")
+        mock_input.side_effect = ["ai suggest_fix_file test.py \"issue\"", "exit"]
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        mock_local_read_file.assert_called_once_with("test.py")
+        mock_llm_client.suggest_code_modification.assert_called_once_with("file content", "issue")
+        self.assertIn("Error suggesting fix: Test API Error", output)
+
+    @patch('builtins.input')
+    @patch('jarules_agent.ui.cli.GitHubClient')
+    @patch('jarules_agent.ui.cli.LLMManager')
+    def test_ai_suggest_fix_file_no_path_or_issue(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
+        mock_llm_manager_instance, mock_llm_client, _ = self._setup_cli_mocks(
+            MockLLMManagerClass, MockGitHubClientClass, llm_client_spec=GeminiClient
+        )
+        mock_input.side_effect = ["ai suggest_fix_file test.py", "exit"] # Missing issue
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai suggest_fix_file <file_path> <issue_description>", output)
+        mock_llm_client.suggest_code_modification.assert_not_called()
+        
+        self.mock_stdout.truncate(0) # Clear stdout for next check
+        self.mock_stdout.seek(0)
+        mock_input.side_effect = ["ai suggest_fix_file", "exit"] # Missing path and issue
+        run_cli()
+        output = self.mock_stdout.getvalue()
+        self.assertIn("Usage: ai suggest_fix_file <file_path> <issue_description>", output)
+        mock_llm_client.suggest_code_modification.assert_not_called()
 
     # --- Tests for 'gh_ls' and 'gh_read' commands ---
     @patch('builtins.input')
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_gh_ls_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClientClass) 
-        mock_gh_instance = MockGitHubClientClass.return_value
+        _, _, mock_gh_instance = self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClientClass) 
+        # mock_gh_instance = MockGitHubClientClass.return_value # This is now handled by _setup_cli_mocks
         mock_gh_instance.list_repo_files.return_value = ['file1.py', 'README.md']
         mock_input.side_effect = ["gh_ls testowner/testrepo/docs", "exit"]
         run_cli()
@@ -340,8 +642,8 @@ class TestCLI(unittest.TestCase):
     @patch('jarules_agent.ui.cli.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager')
     def test_gh_read_success(self, MockLLMManagerClass, MockGitHubClientClass, mock_input):
-        self._setup_standard_mocks(MockLLMManagerClass, MockGitHubClientClass)
-        mock_gh_instance = MockGitHubClientClass.return_value
+        _, _, mock_gh_instance = self._setup_cli_mocks(MockLLMManagerClass, MockGitHubClientClass)
+        # mock_gh_instance = MockGitHubClientClass.return_value # This is now handled by _setup_cli_mocks
         mock_gh_instance.read_repo_file.return_value = "File content from GitHub"
         mock_input.side_effect = ["gh_read owner/repo/path/to/file.txt", "exit"]
         run_cli()

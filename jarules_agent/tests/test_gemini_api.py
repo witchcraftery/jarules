@@ -11,7 +11,8 @@ if '.' not in sys.path: # Optional: Check if current directory is already in sys
 
 try:
     from jarules_agent.connectors.gemini_api import GeminiClient, GeminiApiKeyError, GeminiApiError, GeminiClientError
-    import google.generativeai as genai # For accessing genai.types and exceptions
+    import google.generativeai as genai # For GenerativeModel class
+    from google.ai.generativelanguage import types as glm_types # For types
     from google.api_core import exceptions as google_exceptions
 except ModuleNotFoundError:
     # This path adjustment might be necessary if the above doesn't work in all execution contexts
@@ -19,6 +20,7 @@ except ModuleNotFoundError:
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     from connectors.gemini_api import GeminiClient, GeminiApiKeyError, GeminiApiError, GeminiClientError
     import google.generativeai as genai
+    from google.ai.generativelanguage import types as glm_types # For types
     from google.api_core import exceptions as google_exceptions
 
 
@@ -98,18 +100,23 @@ class TestGeminiApiInteraction(unittest.TestCase):
 
     def test_generate_content_raw_api_call_success(self):
         """Test _generate_content_raw successfully calls the API and returns response."""
-        mock_api_response = MagicMock(spec=genai.types.GenerateContentResponse)
+        mock_api_response = MagicMock(spec=glm_types.GenerateContentResponse)
         self.mock_model_instance.generate_content.return_value = mock_api_response
         
         prompt_parts = ["test prompt"]
-        gen_config = genai.types.GenerationConfig(temperature=0.5)
+        # gen_config needs to be created using glm.GenerationConfig if that's the correct type
+        # For now, assuming the structure passed to the actual API call is a dict or compatible object
+        # If genai.types.GenerationConfig was just for type hinting or spec, this might be okay.
+        # Let's assume the client itself constructs the GenerationConfig object properly if needed.
+        # The test focuses on the client's method call, not necessarily constructing this object.
+        gen_config_dict = {"temperature": 0.5} # Pass as dict, client should handle
         safety_settings = [{"category": "HARM_CATEGORY_SEXUALITY", "threshold": "BLOCK_NONE"}]
 
-        response = self.client._generate_content_raw(prompt_parts, generation_config=gen_config, safety_settings=safety_settings)
+        response = self.client._generate_content_raw(prompt_parts, generation_config=gen_config_dict, safety_settings=safety_settings)
         
         self.mock_model_instance.generate_content.assert_called_once_with(
             contents=prompt_parts,
-            generation_config=gen_config,
+            generation_config=gen_config_dict, # Ensure this matches what the client sends
             safety_settings=safety_settings
         )
         self.assertEqual(response, mock_api_response)
@@ -134,13 +141,16 @@ class TestGeminiApiInteraction(unittest.TestCase):
     def test_generate_text_success(self):
         """Test generate_text successfully generates and extracts text."""
         # Mock the internal _generate_content_raw method for this public method test
-        mock_raw_response = MagicMock(spec=genai.types.GenerateContentResponse)
+        mock_raw_response = MagicMock(spec=glm_types.GenerateContentResponse)
         # Simulate a valid candidate with text parts
-        part1 = MagicMock()
+        part1 = MagicMock(spec=glm_types.Part)
         part1.text = "Hello "
-        part2 = MagicMock()
+        part2 = MagicMock(spec=glm_types.Part)
         part2.text = "World!"
-        mock_raw_response.candidates = [MagicMock(content=MagicMock(parts=[part1, part2]))]
+        
+        candidate_content = MagicMock(spec=glm_types.Content, parts=[part1, part2])
+        mock_candidate = MagicMock(spec=glm_types.Candidate, content=candidate_content)
+        mock_raw_response.candidates = [mock_candidate]
         mock_raw_response.prompt_feedback = None # No blocking
 
         with patch.object(self.client, '_generate_content_raw', return_value=mock_raw_response) as mock_raw_call:
@@ -151,9 +161,10 @@ class TestGeminiApiInteraction(unittest.TestCase):
 
     def test_generate_text_prompt_blocked(self):
         """Test generate_text handles a blocked prompt response."""
-        mock_raw_response = MagicMock(spec=genai.types.GenerateContentResponse)
+        mock_raw_response = MagicMock(spec=glm_types.GenerateContentResponse)
         mock_raw_response.candidates = [] # No candidates
-        mock_raw_response.prompt_feedback = MagicMock(block_reason=genai.types.BlockedReason.SAFETY, block_reason_message="Blocked due to safety concerns")
+        # Ensure BlockedReason is correctly referenced from glm_types.BlockedReason
+        mock_raw_response.prompt_feedback = MagicMock(block_reason=glm_types.BlockedReason.SAFETY, block_reason_message="Blocked due to safety concerns")
         
         with patch.object(self.client, '_generate_content_raw', return_value=mock_raw_response):
             with self.assertRaisesRegex(GeminiApiError, "Prompt blocked by Gemini API. Reason: SAFETY"):
@@ -162,8 +173,10 @@ class TestGeminiApiInteraction(unittest.TestCase):
 
     def test_generate_text_no_content_parts(self):
         """Test generate_text handles response with no text parts."""
-        mock_raw_response = MagicMock(spec=genai.types.GenerateContentResponse)
-        mock_raw_response.candidates = [MagicMock(content=MagicMock(parts=[]))] # Empty parts
+        mock_raw_response = MagicMock(spec=glm_types.GenerateContentResponse)
+        candidate_content = MagicMock(spec=glm_types.Content, parts=[]) # Empty parts
+        mock_candidate = MagicMock(spec=glm_types.Candidate, content=candidate_content)
+        mock_raw_response.candidates = [mock_candidate]
         mock_raw_response.prompt_feedback = None
 
         with patch.object(self.client, '_generate_content_raw', return_value=mock_raw_response):
@@ -177,7 +190,7 @@ class TestGeminiApiInteraction(unittest.TestCase):
 
     def test_generate_text_no_candidates(self):
         """Test generate_text handles response with no candidates."""
-        mock_raw_response = MagicMock(spec=genai.types.GenerateContentResponse)
+        mock_raw_response = MagicMock(spec=glm_types.GenerateContentResponse)
         mock_raw_response.candidates = [] # No candidates
         mock_raw_response.prompt_feedback = None # No blocking either, just empty
 
@@ -214,29 +227,29 @@ class TestGeminiCodeGeneration(unittest.TestCase):
         self.model_patch.stop()
 
     def _prepare_mock_response(self, text_content: Optional[str] = None, 
-                               prompt_block_reason: Optional[genai.types.BlockedReason] = None, 
-                               finish_reason: genai.types.FinishReason = genai.types.FinishReason.STOP,
-                               safety_ratings: Optional[List[genai.types.SafetyRating]] = None):
-        mock_response = MagicMock(spec=genai.types.GenerateContentResponse)
+                               prompt_block_reason: Optional[glm_types.BlockedReason] = None, 
+                               finish_reason: glm_types.FinishReason = glm_types.FinishReason.STOP,
+                               safety_ratings: Optional[List[glm_types.SafetyRating]] = None):
+        mock_response = MagicMock(spec=glm_types.GenerateContentResponse)
         
         if prompt_block_reason:
-            mock_response.prompt_feedback = MagicMock(block_reason=prompt_block_reason)
+            mock_response.prompt_feedback = MagicMock(block_reason=prompt_block_reason) # block_reason type is glm_types.BlockedReason
             mock_response.candidates = [] # Typically no candidates if prompt is blocked
         else:
             mock_response.prompt_feedback = MagicMock(block_reason=None)
             
-            candidate_content = MagicMock(spec=genai.types.Content)
+            candidate_content = MagicMock(spec=glm_types.Content)
             if text_content is not None:
-                part = MagicMock(spec=genai.types.Part)
+                part = MagicMock(spec=glm_types.Part)
                 part.text = text_content
                 candidate_content.parts = [part]
             else:
                 candidate_content.parts = []
             
-            candidate = MagicMock(spec=genai.types.Candidate)
+            candidate = MagicMock(spec=glm_types.Candidate)
             candidate.content = candidate_content
-            candidate.finish_reason = finish_reason
-            candidate.safety_ratings = safety_ratings if safety_ratings is not None else []
+            candidate.finish_reason = finish_reason # finish_reason type is glm_types.FinishReason
+            candidate.safety_ratings = safety_ratings if safety_ratings is not None else [] # safety_ratings type is list of glm_types.SafetyRating
             mock_response.candidates = [candidate]
             
         return mock_response
@@ -306,7 +319,7 @@ class TestGeminiCodeGeneration(unittest.TestCase):
     @patch.object(GeminiClient, '_generate_content_raw')
     def test_generate_code_prompt_safety_blocked(self, mock_raw_call):
         from jarules_agent.connectors.gemini_api import GeminiCodeGenerationError # Local import
-        mock_raw_call.return_value = self._prepare_mock_response(prompt_block_reason=genai.types.BlockedReason.SAFETY)
+        mock_raw_call.return_value = self._prepare_mock_response(prompt_block_reason=glm_types.BlockedReason.SAFETY)
         
         with self.assertRaisesRegex(GeminiCodeGenerationError, "Code generation prompt blocked by Gemini API. Reason: SAFETY"):
             self.client.generate_code("a risky prompt")
@@ -316,7 +329,7 @@ class TestGeminiCodeGeneration(unittest.TestCase):
     def test_generate_code_finish_reason_safety(self, mock_raw_call):
         from jarules_agent.connectors.gemini_api import GeminiCodeGenerationError # Local import
         # Simulate that the prompt was not blocked, but the generation stopped due to safety.
-        mock_raw_call.return_value = self._prepare_mock_response(text_content="potentially unsafe part", finish_reason=genai.types.FinishReason.SAFETY)
+        mock_raw_call.return_value = self._prepare_mock_response(text_content="potentially unsafe part", finish_reason=glm_types.FinishReason.SAFETY)
         
         with self.assertRaisesRegex(GeminiCodeGenerationError, "Code generation stopped unexpectedly. Finish Reason: SAFETY"):
             self.client.generate_code("another risky prompt")
@@ -422,7 +435,7 @@ class TestGeminiCodeExplanation(unittest.TestCase):
         from jarules_agent.connectors.gemini_api import GeminiExplanationError # Local import
         code_snippet = "dangerous_code();"
         # Simulate prompt blocked
-        mock_raw_call.return_value = self.prepare_mock_response(self, prompt_block_reason=genai.types.BlockedReason.SAFETY)
+        mock_raw_call.return_value = self.prepare_mock_response(self, prompt_block_reason=glm_types.BlockedReason.SAFETY)
         
         with self.assertRaisesRegex(GeminiExplanationError, "Code explanation prompt blocked by Gemini API. Reason: SAFETY"):
             self.client.explain_code(code_snippet)
@@ -433,7 +446,7 @@ class TestGeminiCodeExplanation(unittest.TestCase):
         from jarules_agent.connectors.gemini_api import GeminiExplanationError # Local import
         code_snippet = "some_other_code();"
         # Simulate generation stopped due to safety (not prompt block)
-        mock_raw_call.return_value = self.prepare_mock_response(self, text_content="This is part of an explanation that got cut off", finish_reason=genai.types.FinishReason.SAFETY)
+        mock_raw_call.return_value = self.prepare_mock_response(self, text_content="This is part of an explanation that got cut off", finish_reason=glm_types.FinishReason.SAFETY)
         
         with self.assertRaisesRegex(GeminiExplanationError, "Code explanation stopped unexpectedly. Finish Reason: SAFETY"):
             self.client.explain_code(code_snippet)
@@ -540,7 +553,7 @@ class TestGeminiCodeModification(unittest.TestCase):
     @patch.object(GeminiClient, '_generate_content_raw')
     def test_suggest_modification_safety_blocked_prompt(self, mock_raw_call):
         from jarules_agent.connectors.gemini_api import GeminiModificationError # Local import
-        mock_raw_call.return_value = self.prepare_mock_response(self, prompt_block_reason=genai.types.BlockedReason.SAFETY)
+        mock_raw_call.return_value = self.prepare_mock_response(self, prompt_block_reason=glm_types.BlockedReason.SAFETY)
         
         with self.assertRaisesRegex(GeminiModificationError, "Code modification prompt blocked. Reason: SAFETY"):
             self.client.suggest_code_modification("code", "issue")
@@ -549,7 +562,7 @@ class TestGeminiCodeModification(unittest.TestCase):
     @patch.object(GeminiClient, '_generate_content_raw')
     def test_suggest_modification_finish_reason_other(self, mock_raw_call):
         from jarules_agent.connectors.gemini_api import GeminiModificationError # Local import
-        mock_raw_call.return_value = self.prepare_mock_response(self, text_content="...", finish_reason=genai.types.FinishReason.OTHER)
+        mock_raw_call.return_value = self.prepare_mock_response(self, text_content="...", finish_reason=glm_types.FinishReason.OTHER)
         
         with self.assertRaisesRegex(GeminiModificationError, "Code modification stopped unexpectedly. Finish Reason: OTHER"):
             self.client.suggest_code_modification("code", "issue")

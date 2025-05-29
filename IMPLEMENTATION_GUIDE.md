@@ -149,3 +149,22 @@ Due to the tooling issues, these changes to `test_cli.py` should be applied manu
 
 ---
 Future sections can be added to this guide as new complex tasks arise.
+
+### Detailed Plan for Updating `jarules_agent/tests/test_cli.py` (Generated 2024-03-11)
+
+1. *Update imports in `jarules_agent/tests/test_cli.py`*:
+    - Add `from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError`.
+    - Add `from jarules_agent.connectors.base_llm_connector import BaseLLMConnector`.
+2. *Update mocking strategy for AI command tests in `jarules_agent/tests/test_cli.py`*:
+    - Change `@patch('jarules_agent.ui.cli.GeminiClient')` to `@patch('jarules_agent.ui.cli.LLMManager')`.
+    - Mock the `get_llm_connector` method of the `LLMManager` instance to return a `MagicMock(spec=BaseLLMConnector)` or `MagicMock(spec=GeminiClient)`.
+    - Configure the methods of this inner LLM client mock (e.g., `generate_code`, `explain_code`) for specific test assertions.
+3. *Refactor test methods in `jarules_agent/tests/test_cli.py`*:
+    - Implement the `_setup_cli_mocks` helper method as described in the implementation guide.
+    - Update `test_startup_gemini_api_key_error` (renaming it to `test_startup_llm_manager_init_failure` or similar, e.g. `test_startup_llm_connector_error_handling` as per the guide's example).
+    - Refactor all AI command tests (`test_ai_gencode_*`, `test_ai_explain_*`, `test_ai_suggest_fix_*`) using the new mocking strategy and helper method. This includes tests for success, empty results, API errors, connector errors, generation errors, and missing arguments/file issues.
+    - Adjust non-AI command tests (`ls`, `read`, `write`, `gh_ls`, `gh_read`) to use `@patch('jarules_agent.ui.cli.LLMManager')` and ensure the LLM mock setup doesn't interfere.
+4. *Run tests*:
+    - After applying the changes, run the test suite to ensure all tests pass and the updates correctly reflect the new architecture.
+5. *Submit the changes*:
+    - Commit the updated `test_cli.py` and `IMPLEMENTATION_GUIDE.md` with a message describing the refactoring and the guide update.
