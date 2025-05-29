@@ -4,9 +4,10 @@ import os
 from typing import Optional, List, Any, Dict
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions # For specific API errors
+from .base_llm_connector import BaseLLMConnector, LLMConnectorError
 
 # --- Custom Exceptions ---
-class GeminiClientError(Exception):
+class GeminiClientError(LLMConnectorError):
     """Base exception for GeminiClient errors."""
     pass
 
@@ -32,49 +33,80 @@ class GeminiModificationError(GeminiClientError):
     """Raised for specific errors during code modification suggestions, e.g., safety blocks."""
     pass
 
-class GeminiClient:
+class GeminiClient(BaseLLMConnector):
     """
     A client for interacting with the Google Gemini API.
     """
     DEFAULT_MODEL_NAME = 'gemini-1.5-flash-latest' # A good default, you can change if needed
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: Optional[str] = None, **kwargs: Any):
         """
         Initializes the GeminiClient.
 
         Args:
             model_name: Optional. The name of the Gemini model to use. 
                         Defaults to 'gemini-1.5-flash-latest'.
+            **kwargs: Additional keyword arguments for connector-specific configuration,
+                      including 'api_key', 'default_system_prompt', 'generation_params'.
 
         Raises:
-            GeminiApiKeyError: If the GEMINI_API_KEY environment variable is not set.
+            GeminiApiKeyError: If the API key is not found.
+            GeminiClientError: For other configuration or initialization issues.
         """
-        self.api_key = os.environ.get("GEMINI_API_KEY")
+        super().__init__(model_name=model_name, **kwargs) 
+        
+        # 1. API Key Handling
+        # Prioritize API key from self._config (populated by kwargs in BaseLLMConnector), then environment variable
+        self.api_key = self._config.get('api_key') or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             raise GeminiApiKeyError(
-                "GEMINI_API_KEY environment variable not set. "
-                "Please set it to your Google Gemini API key."
+                "Gemini API key not found. Pass 'api_key' in LLMManager config or "
+                "set GEMINI_API_KEY environment variable."
             )
         
         try:
             genai.configure(api_key=self.api_key)
-        except Exception as e: # Broad exception for configure issues
-            raise GeminiClientError(f"Failed to configure Gemini API: {e}") from e
+        except Exception as e:
+            raise GeminiClientError(f"Failed to configure Gemini API: {e}", underlying_exception=e)
 
-        self.model_name = model_name or self.DEFAULT_MODEL_NAME
+        # 2. Default System Prompt Handling
+        self.default_system_prompt: Optional[str] = self._config.get('default_system_prompt')
+
+        # 3. Generation Parameters Handling
+        self.default_generation_config: Optional[genai.types.GenerationConfig] = None
+        generation_params_dict = self._config.get('generation_params')
+        if isinstance(generation_params_dict, dict):
+            try:
+                # Ensure only valid keys for GenerationConfig are passed
+                # Valid keys are: temperature, top_p, top_k, candidate_count, max_output_tokens, stop_sequences
+                valid_gen_config_keys = {
+                    "temperature", "top_p", "top_k", "candidate_count", 
+                    "max_output_tokens", "stop_sequences"
+                }
+                filtered_params = {k: v for k, v in generation_params_dict.items() if k in valid_gen_config_keys}
+                if filtered_params:
+                    self.default_generation_config = genai.types.GenerationConfig(**filtered_params)
+            except Exception as e: # Catch potential errors during GenerationConfig creation
+                raise GeminiClientError(f"Invalid 'generation_params' in config: {e}", underlying_exception=e)
+
+        # Model Initialization (using self.model_name from BaseLLMConnector)
+        effective_model_name = self.model_name or self.DEFAULT_MODEL_NAME
         try:
-            self.model = genai.GenerativeModel(self.model_name)
+            self.model = genai.GenerativeModel(effective_model_name)
+            # Update self.model_name if the default was used and no specific model was requested.
+            if self.model_name is None:
+                 self.model_name = effective_model_name 
             print(f"GeminiClient initialized successfully with model: {self.model_name}")
-        except Exception as e: # Broad exception for model init issues
-            raise GeminiClientError(f"Failed to initialize Gemini model '{self.model_name}': {e}") from e
+        except Exception as e:
+            raise GeminiClientError(f"Failed to initialize Gemini model '{self.model_name}': {e}", underlying_exception=e)
 
-    def _generate_content_raw(self, prompt_parts: List[Any], generation_config: Optional[genai.types.GenerationConfig] = None, safety_settings: Optional[List[Dict]] = None) -> genai.types.GenerateContentResponse:
+    def _generate_content_raw(self, prompt_parts: List[Any], method_generation_config: Optional[genai.types.GenerationConfig] = None, safety_settings: Optional[List[Dict]] = None, **kwargs: Any) -> genai.types.GenerateContentResponse:
         """
         Private helper to make a raw call to the Gemini API's generate_content.
 
         Args:
             prompt_parts: A list of parts for the prompt (e.g., strings, images).
-            generation_config: Optional. Configuration for the generation.
+            method_generation_config: Optional. Configuration for the generation, passed from calling method.
             safety_settings: Optional. Safety settings for the request.
 
         Returns:
@@ -86,11 +118,14 @@ class GeminiClient:
         if not self.model: # Should not happen if __init__ succeeded
             raise GeminiClientError("Gemini model not initialized.")
         
-        print(f"Sending prompt to Gemini: {prompt_parts}")
+        # Prioritize generation config: method > instance default > API default (None)
+        final_generation_config = method_generation_config if method_generation_config is not None else self.default_generation_config
+
+        print(f"Sending prompt to Gemini: {prompt_parts}. Config: {final_generation_config}")
         try:
             response = self.model.generate_content(
                 contents=prompt_parts,
-                generation_config=generation_config,
+                generation_config=final_generation_config,
                 safety_settings=safety_settings
             )
             return response
@@ -144,7 +179,7 @@ class GeminiClient:
         "If you need to include comments, ensure they are within the code block itself (e.g., using # for Python)."
     )
 
-    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None) -> Optional[str]:
+    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
         """
         Generates code using the Gemini API.
 
@@ -160,15 +195,24 @@ class GeminiClient:
             GeminiCodeGenerationError: If the prompt is blocked for safety reasons or generation stops unexpectedly.
             GeminiApiError: For other API-related errors during the call.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_CODE_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_CODE_SYSTEM_INSTRUCTION
         
         prompt_parts = []
         if active_system_instruction: # Ensure it's not an empty string if user explicitly passed ""
             prompt_parts.append(active_system_instruction)
         prompt_parts.append(user_prompt)
 
+        # For now, using instance default generation config.
+        # Could extend to allow method-specific overrides via kwargs if needed.
+        current_generation_config = self.default_generation_config 
+
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             # Check for safety blocks or problematic finish reasons first
             if response.prompt_feedback and response.prompt_feedback.block_reason:
@@ -236,7 +280,7 @@ class GeminiClient:
         "Describe its purpose, how it works, and any key components or logic."
     )
 
-    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None) -> Optional[str]:
+    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
         """
         Explains a given code snippet using the Gemini API.
 
@@ -252,7 +296,12 @@ class GeminiClient:
             GeminiExplanationError: If the prompt is blocked for safety reasons or generation stops unexpectedly.
             GeminiApiError: For other API-related errors during the call.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_EXPLAIN_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_EXPLAIN_SYSTEM_INSTRUCTION
         
         # Constructing prompt parts for explanation
         # It's often good to clearly delineate the code to be explained.
@@ -263,8 +312,11 @@ class GeminiClient:
             prompt_parts.append(active_system_instruction)
         prompt_parts.append(user_prompt_for_explanation)
 
+        # For now, using instance default generation config.
+        current_generation_config = self.default_generation_config 
+
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code explanation prompt blocked by Gemini API. Reason: {response.prompt_feedback.block_reason.name}. Details: {response.prompt_feedback}"
@@ -305,7 +357,7 @@ class GeminiClient:
         "Do not include any other explanatory text outside the code block unless it's part of the code comments."
     )
 
-    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None) -> Optional[str]:
+    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
         """
         Suggests modifications to a given code snippet based on an issue description.
 
@@ -322,7 +374,12 @@ class GeminiClient:
             GeminiModificationError: If the prompt is blocked or generation stops unexpectedly.
             GeminiApiError: For other API-related errors.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_MODIFY_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_MODIFY_SYSTEM_INSTRUCTION
         
         user_prompt_for_modification = (
             f"Issue/Request: {issue_description}\n\n"
@@ -331,9 +388,12 @@ class GeminiClient:
         )
 
         prompt_parts = [active_system_instruction, user_prompt_for_modification]
+        
+        # For now, using instance default generation config.
+        current_generation_config = self.default_generation_config 
 
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code modification prompt blocked. Reason: {response.prompt_feedback.block_reason.name}"
@@ -390,30 +450,74 @@ class GeminiClient:
 
 
 # Example usage (optional, for quick testing if GEMINI_API_KEY is set)
+if __name__ == '__main__':
+    # This example is illustrative. In a real application, you might not pass
+    # the API key directly in kwargs if it's expected to be in the environment.
+    # However, this shows how kwargs could be used by the base or this class.
+    # For this example, we'll rely on the environment variable.
+    # Ensure GEMINI_API_KEY is set in your environment before running.
+    
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("Please set the GEMINI_API_KEY environment variable to test.")
+    else:
+        try:
+            # Initialize without explicit model_name to use default
+            client = GeminiClient() 
+            print(f"\n--- Using model: {client.model_name} ---")
+
+            # 1. Test generate_code
+            print("\n--- Testing generate_code ---")
+            python_prompt = "Create a Python function that returns the square of a number."
+            generated_python_code = client.generate_code(python_prompt)
+            if generated_python_code:
+                print("Generated Python Code:\n", generated_python_code)
+            else:
+                print("No Python code generated or an issue occurred.")
+
+            # 2. Test explain_code
+            print("\n--- Testing explain_code ---")
+            code_to_explain = "def hello(name):\n  print(f'Hello, {name}!')"
+            explanation = client.explain_code(code_to_explain)
+            if explanation:
+                print(f"Explanation for:\n{code_to_explain}\n---\n{explanation}")
+            else:
+                print("No explanation generated or an issue occurred.")
+
+            # 3. Test suggest_code_modification
+            print("\n--- Testing suggest_code_modification ---")
+            original_code = "def add(a,b):\n  return a-b # Bug here"
+            issue = "This function should add two numbers, not subtract."
+            modified_code = client.suggest_code_modification(original_code, issue)
+            if modified_code:
+                print(f"Original Code:\n{original_code}\nIssue: {issue}\n---\nSuggested Modification:\n{modified_code}")
+            else:
+                print("No modification suggested or an issue occurred.")
+            
+            # 4. Test with a non-default model (if you have access to others like 1.0 Pro)
+            # try:
+            #     pro_client = GeminiClient(model_name="gemini-1.0-pro") # Example
+            #     print(f"\n--- Using model: {pro_client.model_name} ---")
+            #     pro_response = pro_client.generate_code("Create a simple HTML page structure.")
+            #     if pro_response:
+            #         print("Generated HTML (from Pro model if different):\n", pro_response)
+            #     else:
+            #         print("No code generated from Pro model.")
+            # except GeminiClientError as e:
+            #     print(f"Could not initialize or use Pro model: {e}")
+
+
+        except GeminiApiKeyError as e:
+            print(f"API Key Error: {e}")
+        except GeminiCodeGenerationError as e:
+            print(f"Code Generation Error: {e}")
+        except GeminiExplanationError as e:
+            print(f"Explanation Error: {e}")
+        except GeminiModificationError as e:
+            print(f"Modification Error: {e}")
+        except GeminiClientError as e: # Catch other GeminiClient specific errors
+            print(f"Gemini Client Error: {e}")
+        except LLMConnectorError as e: # Catch base connector errors
+            print(f"LLM Connector Error: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred during testing: {e}")
 # if __name__ == '__main__':
-#     try:
-#         # Ensure GEMINI_API_KEY is set in your environment before running
-#         if not os.environ.get("GEMINI_API_KEY"):
-#             print("Please set the GEMINI_API_KEY environment variable to test.")
-#         else:
-#             client = GeminiClient()
-#             simple_prompt = "What is the capital of France?"
-#             print(f"\nTesting with prompt: '{simple_prompt}'")
-#             response_text = client.generate_text(simple_prompt)
-#             print(f"Gemini Response: {response_text}")
-
-#             # Example of a potentially blocked prompt (content policy)
-#             # blocked_prompt = "Tell me something inappropriate." 
-#             # print(f"\nTesting with potentially blocked prompt: '{blocked_prompt}'")
-#             # try:
-#             #    response_text = client.generate_text(blocked_prompt)
-#             #    print(f"Gemini Response: {response_text}")
-#             # except GeminiApiError as e:
-#             #    print(f"Caught expected GeminiApiError for blocked prompt: {e}")
-
-#     except GeminiApiKeyError as e:
-#         print(f"API Key Error: {e}")
-#     except GeminiClientError as e:
-#         print(f"Client Error: {e}")
-#     except Exception as e:
-#         print(f"An unexpected error occurred: {e}")
