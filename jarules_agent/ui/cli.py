@@ -23,7 +23,10 @@ except ModuleNotFoundError:
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     from connectors import local_files
     from connectors import github_connector # Added for GitHubClient
-    from connectors.gemini_api import GeminiClient, GeminiApiKeyError, GeminiCodeGenerationError, GeminiApiError, GeminiExplanationError, GeminiModificationError
+    # Import specific Gemini errors that are caught in command handlers
+    from connectors.gemini_api import GeminiApiKeyError, GeminiCodeGenerationError, GeminiApiError, GeminiExplanationError, GeminiModificationError 
+    from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
+    from jarules_agent.connectors.base_llm_connector import LLMConnectorError # To catch broader LLM errors
 
 
 def display_help():
@@ -55,13 +58,38 @@ def run_cli():
     # Instantiate GitHubClient (can be configured with a token later if needed)
     github_client = github_connector.GitHubClient()
 
-    # Instantiate GeminiClient
+    # Instantiate LLMManager and load default LLM
     try:
-        gemini_client = GeminiClient()
-        print("Gemini Client initialized successfully.") # Optional: for confirmation
-    except GeminiApiKeyError as e:
-        print(f"Error: {e} AI features will be unavailable. Please set the GEMINI_API_KEY environment variable.")
-        return # Exit CLI if API key is not found
+        llm_manager = LLMManager(config_path='config/llm_config.yaml')
+        print("LLMManager initialized successfully.")
+    except LLMConfigError as e:
+        print(f"Error initializing LLMManager: {e}. AI features will be unavailable.")
+        return 
+    except Exception as e:
+        print(f"A critical error occurred initializing LLMManager: {e}. AI features will be unavailable.")
+        return
+
+    active_llm_client = None 
+    default_llm_config_id = "gemini_flash_default" 
+
+    try:
+        active_llm_client = llm_manager.get_llm_connector(default_llm_config_id)
+        if active_llm_client:
+            print(f"Successfully loaded LLM: '{default_llm_config_id}' (Model: {active_llm_client.model_name})")
+        else: 
+            print(f"Warning: Could not load default LLM '{default_llm_config_id}'. AI features may be limited.")
+    except GeminiApiKeyError as e: 
+        print(f"API Key Error for LLM '{default_llm_config_id}': {e}. AI features will be unavailable.")
+        return 
+    except LLMProviderNotImplementedError as e:
+        print(f"LLM Provider Error: {e}. AI features for this provider are unavailable.")
+        return
+    except LLMConfigError as e: 
+        print(f"LLM Configuration Error: {e}. AI features may be unavailable.")
+        return
+    except Exception as e: 
+        print(f"An unexpected error occurred while loading LLM '{default_llm_config_id}': {e}. AI features will be unavailable.")
+        return
 
     display_help()
 
@@ -169,125 +197,135 @@ def run_cli():
                 else:
                     print("Usage: gh_read <owner>/<repo>/<file_path>")
             elif command == "ai" and args and args[0].lower() == "gencode":
+                if not active_llm_client:
+                    print("AI client not available. Please check configuration.")
+                    continue
                 if len(args) > 1:
                     prompt_string = " ".join(args[1:])
                     try:
                         print(f"Generating code for prompt: \"{prompt_string}\"...")
-                        # Ensure gemini_client is available (initialized at startup)
-                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
-                             print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        generated_code = active_llm_client.generate_code(prompt_string)
+                        if generated_code:
+                            print("\n--- Generated Code ---")
+                            print(generated_code)
+                            print("--- End of Generated Code ---")
                         else:
-                            generated_code = gemini_client.generate_code(prompt_string)
-                            if generated_code:
-                                print("\n--- Generated Code ---")
-                                print(generated_code)
-                                print("--- End of Generated Code ---")
-                            else:
-                                print("No code generated, or the response was empty.")
-                    except GeminiCodeGenerationError as e:
+                            print("No code generated, or the response was empty.")
+                    except GeminiCodeGenerationError as e: # Specific error from Gemini
                         print(f"Error generating code: {e}")
-                    except GeminiApiError as e:
+                    except GeminiApiError as e: # Specific error from Gemini
                         print(f"API Error: {e}")
+                    except LLMConnectorError as e: # Broader error from any LLM connector
+                        print(f"LLM Connector Error: {e}")
                     except Exception as e:
                         print(f"An unexpected error occurred during code generation: {e}")
                 else:
                     print("Usage: ai gencode \"<prompt_text>\"")
             elif command == "ai" and args and args[0].lower() == "explain":
+                if not active_llm_client:
+                    print("AI client not available. Please check configuration.")
+                    continue
                 if len(args) > 1:
                     code_snippet = " ".join(args[1:])
                     try:
                         print(f"Explaining code snippet: \"{code_snippet[:50]}...\"")
-                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
-                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        explanation = active_llm_client.explain_code(code_snippet)
+                        if explanation:
+                            print("\n--- Code Explanation ---")
+                            print(explanation)
+                            print("--- End of Explanation ---")
                         else:
-                            explanation = gemini_client.explain_code(code_snippet)
-                            if explanation:
-                                print("\n--- Code Explanation ---")
-                                print(explanation)
-                                print("--- End of Explanation ---")
-                            else:
-                                print("No explanation generated or the response was empty.")
+                            print("No explanation generated or the response was empty.")
                     except GeminiExplanationError as e:
                         print(f"Error explaining code: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
+                    except LLMConnectorError as e:
+                        print(f"LLM Connector Error: {e}")
                     except Exception as e:
                         print(f"An unexpected error occurred during code explanation: {e}")
                 else:
                     print("Usage: ai explain \"<code_snippet>\"")
             elif command == "ai" and args and args[0].lower() == "explain_file":
+                if not active_llm_client:
+                    print("AI client not available. Please check configuration.")
+                    continue
                 if len(args) == 2:
                     file_path = args[1]
                     try:
                         print(f"Explaining file: \"{file_path}\"...")
                         code_content = local_files.read_file(file_path)
-                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
-                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        explanation = active_llm_client.explain_code(code_content)
+                        if explanation:
+                            print("\n--- Code Explanation ---")
+                            print(explanation)
+                            print("--- End of Explanation ---")
                         else:
-                            explanation = gemini_client.explain_code(code_content)
-                            if explanation:
-                                print("\n--- Code Explanation ---")
-                                print(explanation)
-                                print("--- End of Explanation ---")
-                            else:
-                                print("No explanation generated or the response was empty.")
+                            print("No explanation generated or the response was empty.")
                     except FileNotFoundError:
                         print(f"Error: File not found: {file_path}")
                     except GeminiExplanationError as e:
                         print(f"Error explaining code from file: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
+                    except LLMConnectorError as e:
+                        print(f"LLM Connector Error: {e}")
                     except Exception as e:
                         print(f"An unexpected error occurred during file explanation: {e}")
                 else:
                     print("Usage: ai explain_file <filepath>")
             elif command == "ai" and args and args[0].lower() == "suggest_fix":
-                if len(args) == 2: # Expecting code snippet and issue description as two separate arguments
-                    code_snippet = args[0]
-                    issue_description = args[1]
+                if not active_llm_client:
+                    print("AI client not available. Please check configuration.")
+                    continue
+                # Corrected argument parsing: expecting sub-command, code_snippet, issue_description
+                if len(args) >= 3: 
+                    code_snippet = args[1] # Second element after "ai" and "suggest_fix"
+                    issue_description = " ".join(args[2:]) # All remaining parts form the issue
                     try:
                         print(f"Suggesting fix for code snippet: \"{code_snippet[:50]}...\" based on issue: \"{issue_description[:50]}...\"")
-                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
-                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        suggestion = active_llm_client.suggest_code_modification(code_snippet, issue_description)
+                        if suggestion:
+                            print("\n--- Suggested Fix ---")
+                            print(suggestion)
+                            print("--- End of Suggestion ---")
                         else:
-                            suggestion = gemini_client.suggest_code_modification(code_snippet, issue_description)
-                            if suggestion:
-                                print("\n--- Suggested Fix ---")
-                                print(suggestion)
-                                print("--- End of Suggestion ---")
-                            else:
-                                print("No code modification suggested or the response was empty.")
+                            print("No code modification suggested or the response was empty.")
                     except GeminiModificationError as e:
                         print(f"Error suggesting fix: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
+                    except LLMConnectorError as e:
+                        print(f"LLM Connector Error: {e}")
                     except Exception as e:
                         print(f"An unexpected error occurred while suggesting fix: {e}")
                 else:
                     print("Usage: ai suggest_fix \"<code_snippet>\" \"<issue_description>\"")
             elif command == "ai" and args and args[0].lower() == "suggest_fix_file":
-                if len(args) >= 2: # Expecting filepath and at least one word for issue description
-                    file_path = args[0]
-                    issue_description = " ".join(args[1:])
+                if not active_llm_client:
+                    print("AI client not available. Please check configuration.")
+                    continue
+                if len(args) >= 3: # Expecting sub-command, filepath, and issue_description
+                    file_path = args[1]
+                    issue_description = " ".join(args[2:])
                     try:
                         print(f"Suggesting fix for file: \"{file_path}\" based on issue: \"{issue_description[:50]}...\"")
                         code_content = local_files.read_file(file_path)
-                        if 'gemini_client' not in locals() and 'gemini_client' not in globals():
-                            print("Error: Gemini client is not available. AI features may be disabled due to missing API key.")
+                        suggestion = active_llm_client.suggest_code_modification(code_content, issue_description)
+                        if suggestion:
+                            print("\n--- Suggested Fix ---")
+                            print(suggestion)
+                            print("--- End of Suggestion ---")
                         else:
-                            suggestion = gemini_client.suggest_code_modification(code_content, issue_description)
-                            if suggestion:
-                                print("\n--- Suggested Fix ---")
-                                print(suggestion)
-                                print("--- End of Suggestion ---")
-                            else:
-                                print("No code modification suggested or the response was empty.")
+                            print("No code modification suggested or the response was empty.")
                     except FileNotFoundError:
                         print(f"Error: File not found: {file_path}")
                     except GeminiModificationError as e:
                         print(f"Error suggesting fix for file: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
+                    except LLMConnectorError as e:
+                        print(f"LLM Connector Error: {e}")
                     except Exception as e:
                         print(f"An unexpected error occurred while suggesting fix for file: {e}")
                 else:

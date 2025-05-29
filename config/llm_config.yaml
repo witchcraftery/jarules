@@ -1,0 +1,60 @@
+# config/llm_config.yaml
+
+# List of available LLM configurations
+llm_configs:
+  - id: "gemini_flash_default" # Unique identifier for this configuration
+    provider: "gemini"        # Maps to the connector class (e.g., GeminiClient)
+    description: "Default Google Gemini 1.5 Flash model."
+    enabled: true             # Allows disabling a config without removing it
+    model_name: "gemini-1.5-flash-latest"
+    api_key_env: "GEMINI_API_KEY" # Environment variable that holds the API key
+    default_system_prompt: "You are a helpful and concise AI assistant." # Optional
+    generation_params:        # Optional: common generation parameters
+      temperature: 0.7
+      # max_output_tokens: 2048 # Example, Gemini uses specific naming
+
+  - id: "gemini_pro_strict"
+    provider: "gemini"
+    description: "Google Gemini Pro model with stricter code generation prompt."
+    enabled: true
+    model_name: "gemini-1.0-pro" # Or relevant pro model
+    api_key_env: "GEMINI_API_KEY"
+    default_system_prompt: |
+      You are an expert AI coding assistant.
+      Please provide only the code requested by the user, without any additional explanatory text,
+      markdown formatting, or language indicators (like ```python) surrounding the code block.
+      If you need to include comments, ensure they are within the code block itself (e.g., using # for Python).
+    generation_params:
+      temperature: 0.3
+
+  # --- Placeholder Examples (Non-Functional until connectors are built) ---
+
+  - id: "ollama_codellama_7b_local"
+    provider: "ollama" # Future: Maps to an OllamaClient
+    description: "Placeholder for local CodeLlama 7B via Ollama."
+    enabled: false # Not yet functional
+    model_name: "codellama:7b" # Standard Ollama model tag
+    base_url: "http://localhost:11434" # Typical Ollama local endpoint
+    default_system_prompt: "You are CodeLlama, a powerful coding assistant running locally."
+    generation_params:
+      temperature: 0.5
+      # Ollama might have different param names, e.g., num_ctx, top_k, top_p
+
+  - id: "openrouter_mistral_7b"
+    provider: "openrouter" # Future: Maps to an OpenRouterClient
+    description: "Placeholder for Mistral 7B via OpenRouter."
+    enabled: false # Not yet functional
+    model_name: "mistralai/mistral-7b-instruct" # Example OpenRouter model ID
+    api_key_env: "OPENROUTER_API_KEY"
+    # OpenRouter uses a 'source_of_truth' field or similar for routing if not by model_name
+    # http_referer: "http://localhost" # Often required by OpenRouter
+    default_system_prompt: "You are a helpful AI assistant accessed via OpenRouter."
+    generation_params:
+      temperature: 0.7
+
+# --- End of Placeholder Examples ---
+
+# General settings for LLM interactions (optional)
+# llm_general_settings:
+#   default_timeout_seconds: 60
+#   retry_attempts: 1

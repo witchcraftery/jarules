@@ -46,53 +46,67 @@ class GeminiClient(BaseLLMConnector):
         Args:
             model_name: Optional. The name of the Gemini model to use. 
                         Defaults to 'gemini-1.5-flash-latest'.
-            **kwargs: Additional keyword arguments for connector-specific configuration.
-                      (Currently, api_key can be passed via kwargs for flexibility,
-                       but primary method is environment variable)
+            **kwargs: Additional keyword arguments for connector-specific configuration,
+                      including 'api_key', 'default_system_prompt', 'generation_params'.
 
         Raises:
-            GeminiApiKeyError: If the GEMINI_API_KEY environment variable is not set
-                               and 'api_key' is not in kwargs.
+            GeminiApiKeyError: If the API key is not found.
+            GeminiClientError: For other configuration or initialization issues.
         """
-        super().__init__(model_name=model_name, **kwargs) # Pass kwargs to base
+        super().__init__(model_name=model_name, **kwargs) 
         
-        # Prioritize API key from kwargs, then environment variable
+        # 1. API Key Handling
+        # Prioritize API key from self._config (populated by kwargs in BaseLLMConnector), then environment variable
         self.api_key = self._config.get('api_key') or os.environ.get("GEMINI_API_KEY")
-
         if not self.api_key:
             raise GeminiApiKeyError(
-                "Gemini API key not found. Set GEMINI_API_KEY environment variable "
-                "or pass 'api_key' in kwargs."
+                "Gemini API key not found. Pass 'api_key' in LLMManager config or "
+                "set GEMINI_API_KEY environment variable."
             )
         
         try:
             genai.configure(api_key=self.api_key)
-        except Exception as e: # Broad exception for configure issues
-            raise GeminiClientError(f"Failed to configure Gemini API: {e}", underlying_exception=e) from e
+        except Exception as e:
+            raise GeminiClientError(f"Failed to configure Gemini API: {e}", underlying_exception=e)
 
-        # Use self.model_name from BaseLLMConnector, which is set by super().__init__
-        # If it's None (not passed to __init__), use the default.
+        # 2. Default System Prompt Handling
+        self.default_system_prompt: Optional[str] = self._config.get('default_system_prompt')
+
+        # 3. Generation Parameters Handling
+        self.default_generation_config: Optional[genai.types.GenerationConfig] = None
+        generation_params_dict = self._config.get('generation_params')
+        if isinstance(generation_params_dict, dict):
+            try:
+                # Ensure only valid keys for GenerationConfig are passed
+                # Valid keys are: temperature, top_p, top_k, candidate_count, max_output_tokens, stop_sequences
+                valid_gen_config_keys = {
+                    "temperature", "top_p", "top_k", "candidate_count", 
+                    "max_output_tokens", "stop_sequences"
+                }
+                filtered_params = {k: v for k, v in generation_params_dict.items() if k in valid_gen_config_keys}
+                if filtered_params:
+                    self.default_generation_config = genai.types.GenerationConfig(**filtered_params)
+            except Exception as e: # Catch potential errors during GenerationConfig creation
+                raise GeminiClientError(f"Invalid 'generation_params' in config: {e}", underlying_exception=e)
+
+        # Model Initialization (using self.model_name from BaseLLMConnector)
         effective_model_name = self.model_name or self.DEFAULT_MODEL_NAME
         try:
             self.model = genai.GenerativeModel(effective_model_name)
-            print(f"GeminiClient initialized successfully with model: {effective_model_name}")
-            if self.model_name != effective_model_name and self.model_name is not None:
-                # If a specific model was requested but default was used because it was None,
-                # this branch won't be hit. This is more if base class logic changes model_name.
-                print(f"Note: Requested model '{self.model_name}' was overridden to '{effective_model_name}'.")
-            elif self.model_name is None:
-                 self.model_name = effective_model_name # Store the default if none was passed
+            # Update self.model_name if the default was used and no specific model was requested.
+            if self.model_name is None:
+                 self.model_name = effective_model_name 
+            print(f"GeminiClient initialized successfully with model: {self.model_name}")
+        except Exception as e:
+            raise GeminiClientError(f"Failed to initialize Gemini model '{self.model_name}': {e}", underlying_exception=e)
 
-        except Exception as e: # Broad exception for model init issues
-            raise GeminiClientError(f"Failed to initialize Gemini model '{effective_model_name}': {e}", underlying_exception=e) from e
-
-    def _generate_content_raw(self, prompt_parts: List[Any], generation_config: Optional[genai.types.GenerationConfig] = None, safety_settings: Optional[List[Dict]] = None, **kwargs: Any) -> genai.types.GenerateContentResponse:
+    def _generate_content_raw(self, prompt_parts: List[Any], method_generation_config: Optional[genai.types.GenerationConfig] = None, safety_settings: Optional[List[Dict]] = None, **kwargs: Any) -> genai.types.GenerateContentResponse:
         """
         Private helper to make a raw call to the Gemini API's generate_content.
 
         Args:
             prompt_parts: A list of parts for the prompt (e.g., strings, images).
-            generation_config: Optional. Configuration for the generation.
+            method_generation_config: Optional. Configuration for the generation, passed from calling method.
             safety_settings: Optional. Safety settings for the request.
 
         Returns:
@@ -104,11 +118,14 @@ class GeminiClient(BaseLLMConnector):
         if not self.model: # Should not happen if __init__ succeeded
             raise GeminiClientError("Gemini model not initialized.")
         
-        print(f"Sending prompt to Gemini: {prompt_parts}")
+        # Prioritize generation config: method > instance default > API default (None)
+        final_generation_config = method_generation_config if method_generation_config is not None else self.default_generation_config
+
+        print(f"Sending prompt to Gemini: {prompt_parts}. Config: {final_generation_config}")
         try:
             response = self.model.generate_content(
                 contents=prompt_parts,
-                generation_config=generation_config,
+                generation_config=final_generation_config,
                 safety_settings=safety_settings
             )
             return response
@@ -178,15 +195,24 @@ class GeminiClient(BaseLLMConnector):
             GeminiCodeGenerationError: If the prompt is blocked for safety reasons or generation stops unexpectedly.
             GeminiApiError: For other API-related errors during the call.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_CODE_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_CODE_SYSTEM_INSTRUCTION
         
         prompt_parts = []
         if active_system_instruction: # Ensure it's not an empty string if user explicitly passed ""
             prompt_parts.append(active_system_instruction)
         prompt_parts.append(user_prompt)
 
+        # For now, using instance default generation config.
+        # Could extend to allow method-specific overrides via kwargs if needed.
+        current_generation_config = self.default_generation_config 
+
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             # Check for safety blocks or problematic finish reasons first
             if response.prompt_feedback and response.prompt_feedback.block_reason:
@@ -270,7 +296,12 @@ class GeminiClient(BaseLLMConnector):
             GeminiExplanationError: If the prompt is blocked for safety reasons or generation stops unexpectedly.
             GeminiApiError: For other API-related errors during the call.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_EXPLAIN_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_EXPLAIN_SYSTEM_INSTRUCTION
         
         # Constructing prompt parts for explanation
         # It's often good to clearly delineate the code to be explained.
@@ -281,8 +312,11 @@ class GeminiClient(BaseLLMConnector):
             prompt_parts.append(active_system_instruction)
         prompt_parts.append(user_prompt_for_explanation)
 
+        # For now, using instance default generation config.
+        current_generation_config = self.default_generation_config 
+
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code explanation prompt blocked by Gemini API. Reason: {response.prompt_feedback.block_reason.name}. Details: {response.prompt_feedback}"
@@ -340,7 +374,12 @@ class GeminiClient(BaseLLMConnector):
             GeminiModificationError: If the prompt is blocked or generation stops unexpectedly.
             GeminiApiError: For other API-related errors.
         """
-        active_system_instruction = system_instruction if system_instruction is not None else self.DEFAULT_MODIFY_SYSTEM_INSTRUCTION
+        if system_instruction is not None:
+            active_system_instruction = system_instruction
+        elif self.default_system_prompt is not None:
+            active_system_instruction = self.default_system_prompt
+        else:
+            active_system_instruction = self.DEFAULT_MODIFY_SYSTEM_INSTRUCTION
         
         user_prompt_for_modification = (
             f"Issue/Request: {issue_description}\n\n"
@@ -349,9 +388,12 @@ class GeminiClient(BaseLLMConnector):
         )
 
         prompt_parts = [active_system_instruction, user_prompt_for_modification]
+        
+        # For now, using instance default generation config.
+        current_generation_config = self.default_generation_config 
 
         try:
-            response = self._generate_content_raw(prompt_parts)
+            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code modification prompt blocked. Reason: {response.prompt_feedback.block_reason.name}"
