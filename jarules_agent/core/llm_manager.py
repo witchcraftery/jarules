@@ -158,5 +158,3 @@ class LLMManager:
         if connector:
             self._loaded_connectors[config_id] = connector # Cache the instance
         return connector
-
-```
