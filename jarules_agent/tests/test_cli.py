@@ -40,7 +40,7 @@ class TestCLI(unittest.TestCase):
         self.patch_stdout.stop()
         self.patch_stderr.stop()
 
-    @patch('jarules_agent.ui.cli.GitHubClient') 
+    @patch('jarules_agent.connectors.github_connector.GitHubClient') 
     @patch('jarules_agent.ui.cli.LLMManager') 
     def test_startup_llm_manager_config_error(self, MockLLMManagerClass, MockGitHubClient):
         MockGitHubClient.return_value = MagicMock()
@@ -51,7 +51,7 @@ class TestCLI(unittest.TestCase):
         self.assertNotIn("LLMManager initialized successfully.", output)
         self.assertNotIn("Available commands:", output)
 
-    @patch('jarules_agent.ui.cli.GitHubClient') 
+    @patch('jarules_agent.connectors.github_connector.GitHubClient')
     @patch('jarules_agent.ui.cli.LLMManager') 
     def test_startup_llm_connector_error_handling(self, MockLLMManagerClass, MockGitHubClient): 
         # Use the helper to set up GitHub mock, LLMManager mock will be used directly
