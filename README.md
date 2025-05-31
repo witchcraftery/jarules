@@ -8,105 +8,226 @@ JaRules is an asynchronous development assistant designed to streamline your sof
 
 ## Current Status
 
-🚧 Under Active Development 🚧
+🔧 **LLM Architecture Complete - Test Fixes Ready for Implementation**
 
-## Broad Original Plan (The Vision)
+## Recent Development Status (May 2025)
 
-*   Core Asynchronous Agent Logic
-*   Seamless Local File System Interaction
-*   Comprehensive GitHub Integration (Read & Write)
-*   Flexible AI Model Connectors (Gemini, Localhost, etc.)
-*   Interactive Chat User Interface
-*   Intelligent Task Processing for SE Tasks
+### ✅ **COMPLETED: LLM Configuration System**
+
+- **LLMManager Architecture**: Flexible multi-LLM support system implemented
+- **Configuration Management**: YAML-based LLM configuration with `config/llm_config.yaml`
+- **Gemini Integration**: Fully integrated with configurable parameters
+- **CLI Integration**: Updated to use LLMManager for AI operations
+- **Core Tests**: LLMManager and Gemini connector tests passing
+
+### 🔧 **CURRENT TASK: Test Suite Fixes**
+
+**Status**: **Solution Identified and Tested - Ready for Implementation**
+
+**Issue**: `test_cli.py` tests failing due to LLMManager architecture changes
+**Root Cause**: Mock patch paths and command parsing expectations need updates  
+**Solution**: Comprehensive fixes identified and validated through testing
+**Time Estimate**: 15-30 minutes of manual application
+
+**Blocking Issues Resolved**:
+
+- ✅ Mock path corrections: `@patch('jarules_agent.ui.cli.GitHubClient')` → `@patch('jarules_agent.connectors.github_connector.GitHubClient')`
+- ✅ Command parsing fixes: Update test expectations to match CLI argument handling
+- ✅ Missing error coverage: Additional tests for comprehensive error handling
+
+**Implementation Status**: Fixes ready to apply to `jarules_agent/tests/test_cli.py`
+
+### 📋 **NEXT STEPS: Multi-LLM Expansion**
+
+- Ollama integration for local models
+- OpenRouter connector for cloud model diversity
+- Anthropic Claude support
+- Runtime model switching capabilities
 
 ## Progress So Far (What's Built! ✨)
 
-*   **Project Structure:** Solid foundation laid for `core`, `connectors`, `ui`, and `tests`.
-*   **Local File System (`jarules_agent/connectors/local_files.py`):**
-    *   List files and directories (`ls <path>`).
-    *   Read file content (`read <path>`).
-    *   Write content to files (`write <path> <content>`).
-*   **GitHub Connector (`jarules_agent/connectors/github_connector.py`):**
-    *   **Read Operations:**
-        *   `list_repo_files(owner, repo, path)`: Lists files and directories in a repository path.
-        *   `read_repo_file(owner, repo, file_path)`: Reads the content of a file from a repository.
-    *   **Write Operations (New! 🎉):**
-        *   `create_branch(owner, repo, new_branch_name, source_branch_name)`: Creates a new branch from a source branch.
-        *   `commit_files(owner, repo, branch_name, file_changes, commit_message)`: Commits one or more file changes (specified by path and content) to a branch.
-        *   `create_pull_request(owner, repo, head_branch, base_branch, title, body)`: Creates a new pull request.
-*   **Gemini API Connector (`jarules_agent/connectors/gemini_api.py`) (New! 🧠):**
-    *   `GeminiClient` initialized with `GEMINI_API_KEY` from environment variables.
-    *   Core functionalities implemented:
-        *   `generate_code(user_prompt, system_instruction)`: Generates code based on a user prompt and optional system instructions.
-        *   `explain_code(code_snippet, system_instruction)`: Explains a given code snippet.
-        *   `suggest_code_modification(code_snippet, issue_description, system_instruction)`: Suggests modifications to a code snippet based on an issue description.
-*   **Command-Line Interface (`jarules_agent/ui/cli.py`):** Your current way to interact with JaRules!
-*   **Dependencies (`requirements.txt`):** `requests` for GitHub API calls, `google-generativeai` for Gemini integration.
-*   **Unit Tests (`jarules_agent/tests/`):** Ensuring `local_files.py`, `github_connector.py`, and `gemini_api.py` are reliable. We even caught a bug with tests! 🐞➡️✅
+### **Core Architecture**
+
+- **Project Structure:** Solid foundation with `core`, `connectors`, `ui`, and `tests`
+
+- **LLM Management System**: Flexible architecture supporting multiple AI providers
+- **Configuration System**: YAML-based configuration for easy LLM provider management
+
+### **Local File System (`jarules_agent/connectors/local_files.py`)**
+
+- List files and directories (`ls <path>`)
+
+- Read file content (`read <path>`)
+- Write content to files (`write <path> <content>`)
+
+### **GitHub Connector (`jarules_agent/connectors/github_connector.py`)**
+
+- **Read Operations:**
+  - `list_repo_files(owner, repo, path)`: Lists files and directories in a repository path
+  - `read_repo_file(owner, repo, file_path)`: Reads the content of a file from a repository
+
+- **Write Operations:**
+  - `create_branch(owner, repo, new_branch_name, source_branch_name)`: Creates a new branch from a source branch
+  - `commit_files(owner, repo, branch_name, file_changes, commit_message)`: Commits one or more file changes to a branch
+  - `create_pull_request(owner, repo, head_branch, base_branch, title, body)`: Creates a new pull request
+
+### **AI Integration (`jarules_agent/connectors/gemini_api.py`)**
+
+- **LLMManager Integration**: Configurable Gemini client via LLMManager
+
+- **Core AI Functions:**
+  - `generate_code(user_prompt, system_instruction)`: Generates code based on prompts
+  - `explain_code(code_snippet, system_instruction)`: Explains code snippets
+  - `suggest_code_modification(code_snippet, issue_description, system_instruction)`: Suggests code improvements
+- **Configuration Support**: API key management, default system prompts, generation parameters
+
+### **Command-Line Interface (`jarules_agent/ui/cli.py`)**
+
+- **LLMManager Integration**: Uses LLMManager for AI operations
+
+- **Available Commands:**
+  - **File Operations**: `ls`, `read`, `write`
+  - **GitHub Operations**: `gh_ls`, `gh_read`
+  - **AI Operations**: `ai gencode`, `ai explain`, `ai explain_file`, `ai suggest_fix`, `ai suggest_fix_file`
+  - **Utility**: `help`, `exit`
+
+### **Testing Suite**
+
+- **Core Component Tests**: LLMManager, Gemini API, local files, GitHub connector
+
+- **Integration Tests**: CLI component testing (fixes in progress)
+- **Error Handling**: Comprehensive error scenario coverage
 
 ## How to Run JaRules (CLI)
 
-1.  **Clone the repository** (Details will be added once the repo is public).
-2.  Navigate to the project root directory (where `requirements.txt` is located).
-3.  **Set up a virtual environment (recommended):**
+1. **Clone the repository**:
+
+    ```bash
+    git clone https://github.com/witchcraftery/jarules.git
+    cd jarules
+    ```
+
+2. **Set up a virtual environment (recommended)**:
+
     ```bash
     python -m venv venv
     source venv/bin/activate  # On Windows use `venv\Scripts\activate`
     ```
-4.  **Install dependencies:**
+
+3. **Install dependencies**:
+
     ```bash
     pip install -r requirements.txt
     ```
-5.  **Run the CLI:**
+
+4. **Set up Gemini API key** (for AI features):
+
+    ```bash
+    export GEMINI_API_KEY="your_gemini_api_key_here"
+    ```
+
+5. **Run the CLI**:
+
     ```bash
     python -m jarules_agent.main
     ```
-    (Alternatively, from the project root: `python jarules_agent/main.py`)
-6.  Type `help` in the JaRules CLI to see available commands!
 
-## Next Steps (The Road Ahead 🚀)
+    (Alternatively: `python jarules_agent/main.py`)
 
-The vision for JaRules is rapidly taking shape! Recent planning has laid a detailed groundwork for several key areas. We're excited to move towards implementation:
+6. **Type `help`** in the JaRules CLI to see available commands!
 
-*   **Implementing GitHub Write Operations:**
-    *   **Goal:** Enable JaRules to actively manage GitHub repositories.
-    *   **Planned Features:**
-        *   Create new branches (e.g., for features, fixes).
-        *   Commit one or more files with appropriate messages.
-        *   Create pull requests to propose changes.
-    *   **Details:** Method signatures in `github_connector.py` and new test cases have been outlined.
+## Testing
 
-*   **Full Integration with the Gemini API:**
-    *   **Goal:** Leverage Google's Gemini models for advanced AI-powered development assistance.
-    *   **Planned Features:**
-        *   **Code Generation:** Generate code from natural language prompts.
-        *   **Interactive Code Refinement/Bug Fixing:** Suggest improvements and fixes for existing code.
-        *   **Contextual Code Explanation:** Explain code snippets in natural language.
-    *   **Details:** The API contract in `gemini_api.py` (including `generate_code`, `explain_code`, `suggest_code_modification`), API key management (via `GEMINI_API_KEY` environment variable), and comprehensive unit tests are now implemented.
-    *   **Planned CLI Integration:** Design for integrating these AI capabilities into the CLI is complete. Upcoming work will focus on implementing commands such as:
-        *   `ai gencode "<prompt>"`
-        *   `ai explain "<code>"` and `ai explain_file <filepath> [start_line:end_line]`
-        *   `ai suggest_fix "<code>" "<issue>"` and `ai suggest_fix_file <filepath> "<issue>" [start_line:end_line]`
+### **Run All Tests**
 
-*   **Expanding AI Connector Capabilities (Multi-LLM Support):**
-    *   **Goal:** Make JaRules flexible by supporting various AI models, both cloud-based and local.
-    *   **Planned Architecture:**
-        *   A `BaseLLMConnector` abstract base class will define a common interface for all AI connectors.
-        *   Initial focus on adapting `GeminiClient` to this interface.
-        *   Future plans include connectors for Ollama (to run local models like CodeLlama, Llama 3, Mistral), Anthropic Claude, and potentially other specialized coding LLM APIs.
-        *   The core agent will manage these connectors through a factory pattern and configuration settings.
-    *   **Details:** The base class methods (e.g., `send_prompt`, `generate_code`, `explain_text`) and configuration management have been outlined.
+```bash
+# Full test suite
+python -m pytest jarules_agent/tests/ -v
 
-*   **Developing the Chat User Interface (Electron App):**
-    *   **Goal:** Create an intuitive and interactive desktop application for JaRules.
-    *   **Technology:** Confirmed use of Electron, with Svelte or Vue.js recommended for the frontend.
-    *   **Planned Features (Initial):**
-        *   Message display area, multi-line text input, send button.
-        *   Clear display of user inputs and agent responses (including syntax-highlighted code blocks with a copy function).
-        *   Loading indicators for agent processing.
-    *   **Communication Protocol:** IPC (Inter-Process Communication) between the Electron UI (renderer process) and the Python agent core (via Electron main process), using JSON messages.
+# Specific test file
+python -m pytest jarules_agent/tests/test_llm_manager.py -v
+```
 
-*   **Towards an Implementation Guide:**
-    *   Given the detailed planning, we are considering the development of a more comprehensive "Implementation Guide" or a series of focused development tasks to help contributors dive into these areas. Stay tuned for more details!
+### **Current Test Status**
 
-We're building a powerful assistant, and these next steps are crucial in bringing that vision to life. Contributions and feedback are welcome!
+- ✅ **LLMManager tests**: All passing
+- ✅ **Gemini API tests**: All passing  
+- ✅ **Local files tests**: All passing
+- ✅ **GitHub connector tests**: All passing
+- 🔧 **CLI tests**: Fixes ready for implementation (see IMPLEMENTATION_GUIDE.md)
+
+## Development Status & Next Steps
+
+### **Immediate Priority (Current Task)**
+
+1. **Apply test_cli.py fixes** - Solution ready, manual implementation required
+2. **Validate complete test suite** - Ensure all tests pass with LLMManager architecture
+3. **Update documentation** - Reflect completed LLM architecture
+
+### **Near-term Development (Next 1-2 weeks)**
+
+1. **Ollama Integration**: Add support for local models (CodeLlama, Llama 3, Mistral)
+2. **OpenRouter Connector**: Enable access to diverse cloud models
+3. **Runtime Model Switching**: Allow users to switch between LLM providers in CLI
+
+### **Medium-term Goals (Next month)**
+
+1. **Anthropic Claude Support**: Add Claude API integration
+2. **Enhanced CLI**: Improved user experience and command structure
+3. **Configuration UI**: Web-based configuration management
+
+### **Long-term Vision**
+
+1. **Chat User Interface**: Electron-based desktop application
+2. **Advanced Agent Capabilities**: Multi-step task execution
+3. **Plugin System**: Extensible connector architecture
+
+## Contributing
+
+We're actively developing JaRules and welcome contributions!
+
+### **Current Contribution Opportunities**
+
+- **Test Implementation**: Help apply the test_cli.py fixes
+- **New LLM Connectors**: Implement support for additional AI providers
+- **Documentation**: Improve guides and API documentation
+- **Feature Development**: Work on CLI enhancements and new capabilities
+
+### **Development Setup**
+
+1. Fork and clone the repository
+2. Set up development environment as described above
+3. Run tests to ensure everything works
+4. Check `IMPLEMENTATION_GUIDE.md` for detailed development tasks
+
+## Architecture
+
+JaRules follows a modular architecture:
+
+```
+jarules_agent/
+├── core/               # Core logic and management
+│   └── llm_manager.py  # LLM provider management
+├── connectors/         # External service integrations
+│   ├── local_files.py  # File system operations
+│   ├── github_connector.py  # GitHub API integration
+│   ├── gemini_api.py   # Google Gemini integration
+│   └── base_llm_connector.py  # LLM connector interface
+├── ui/                 # User interfaces
+│   └── cli.py          # Command-line interface
+├── tests/              # Test suite
+└── config/             # Configuration files
+    └── llm_config.yaml # LLM provider configurations
+```
+
+## Documentation
+
+- **IMPLEMENTATION_GUIDE.md**: Detailed development tasks and implementation notes
+- **API Documentation**: Coming soon
+- **Configuration Guide**: See `config/llm_config.yaml` for LLM setup examples
+
+---
+
+**Last Updated**: May 29, 2025  
+**Version**: 0.2.0-dev (LLM Architecture Complete)  
+**Status**: Test fixes ready for implementation, multi-LLM expansion next
