@@ -37,6 +37,7 @@ wheels/
 MANIFEST
 
 # Virtual environments
+jarules_env/
 venv/
 env/
 ENV/
