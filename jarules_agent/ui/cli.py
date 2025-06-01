@@ -59,6 +59,24 @@ def display_help():
     print("    help                         - Prints this list of available commands.")
     print("    exit / quit                  - Exits the CLI.\n")
 
+def strip_quotes(text):
+    """Strip outer quotes from a string if present."""
+    if len(text) >= 2:
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            return text[1:-1]
+    return text
+
+
+def parse_quoted_args(text):
+    """Parse a string into arguments, respecting quoted strings."""
+    import shlex
+    try:
+        return shlex.split(text)
+    except ValueError:
+        # Fallback to simple split if shlex fails
+        return text.split()
+
+
 def run_cli():
     """Runs the main command-line interface loop."""
     print("Welcome to JaRules CLI!")
@@ -169,8 +187,8 @@ def run_cli():
                         repo = path_parts[1]
                         repo_sub_path = "/".join(path_parts[2:]) if len(path_parts) > 2 else ""
                         try:
-                            print(f"Listing files in GitHub repo: {owner}/{repo}, path: '{repo_sub_path or Toplevel}'...")
-                            files = github_client.list_repo_files(owner, repo, repo_sub_path)
+                            print(f"Listing files in GitHub repo: {owner}/{repo}, path: '{repo_sub_path or 'Toplevel'}'...")
+                            files = github_client.list_repo_files(owner=owner, repo=repo, path=repo_sub_path)
                             if files: # list_repo_files returns empty list on error or if dir is empty
                                 print(f"\nFiles in '{owner}/{repo}/{repo_sub_path}':")
                                 for item in files:
@@ -193,7 +211,7 @@ def run_cli():
                         file_path_in_repo = "/".join(path_parts[2:])
                         try:
                             print(f"Reading file from GitHub repo: {owner}/{repo}/{file_path_in_repo}...")
-                            content = github_client.read_repo_file(owner, repo, file_path_in_repo)
+                            content = github_client.read_repo_file(owner=owner, repo=repo, file_path=file_path_in_repo)
                             if content is not None:
                                 print(f"\nContent of '{owner}/{repo}/{file_path_in_repo}':\n---\n{content}\n---")
                             else:
@@ -206,10 +224,11 @@ def run_cli():
                     print("Usage: gh_read <owner>/<repo>/<file_path>")
             elif command == "ai" and args and args[0].lower() == "gencode":
                 if not active_llm_client:
-                    print("AI client not available. Please check configuration.")
+                    print("No LLM connector available.")
                     continue
                 if len(args) > 1:
-                    prompt_string = " ".join(args[1:])
+                    # Join all arguments and strip outer quotes
+                    prompt_string = strip_quotes(" ".join(args[1:]))
                     try:
                         print(f"Generating code for prompt: \"{prompt_string}\"...")
                         generated_code = active_llm_client.generate_code(prompt_string)
@@ -218,9 +237,9 @@ def run_cli():
                             print(generated_code)
                             print("--- End of Generated Code ---")
                         else:
-                            print("No code generated, or the response was empty.")
+                            print("No code generated or the response was empty.")
                     except GeminiCodeGenerationError as e: # Specific error from Gemini
-                        print(f"Error generating code: {e}")
+                        print(f"Code Generation Error: {e}")
                     except GeminiApiError as e: # Specific error from Gemini
                         print(f"API Error: {e}")
                     except LLMConnectorError as e: # Broader error from any LLM connector
@@ -231,10 +250,11 @@ def run_cli():
                     print("Usage: ai gencode \"<prompt_text>\"")
             elif command == "ai" and args and args[0].lower() == "explain":
                 if not active_llm_client:
-                    print("AI client not available. Please check configuration.")
+                    print("No LLM connector available.")
                     continue
                 if len(args) > 1:
-                    code_snippet = " ".join(args[1:])
+                    # Join all arguments and strip outer quotes
+                    code_snippet = strip_quotes(" ".join(args[1:]))
                     try:
                         print(f"Explaining code snippet: \"{code_snippet[:50]}...\"")
                         explanation = active_llm_client.explain_code(code_snippet)
@@ -245,7 +265,7 @@ def run_cli():
                         else:
                             print("No explanation generated or the response was empty.")
                     except GeminiExplanationError as e:
-                        print(f"Error explaining code: {e}")
+                        print(f"Explanation Error: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
                     except LLMConnectorError as e:
@@ -284,12 +304,14 @@ def run_cli():
                     print("Usage: ai explain_file <filepath>")
             elif command == "ai" and args and args[0].lower() == "suggest_fix":
                 if not active_llm_client:
-                    print("AI client not available. Please check configuration.")
+                    print("No LLM connector available.")
                     continue
-                # Corrected argument parsing: expecting sub-command, code_snippet, issue_description
-                if len(args) >= 3: 
-                    code_snippet = args[1] # Second element after "ai" and "suggest_fix"
-                    issue_description = " ".join(args[2:]) # All remaining parts form the issue
+                # Use proper quote-aware parsing for suggest_fix
+                # Re-parse the full input to handle quoted arguments properly
+                full_parts = parse_quoted_args(raw_input)
+                if len(full_parts) >= 4:  # ai, suggest_fix, code_snippet, issue_description
+                    code_snippet = full_parts[2]  # Third element
+                    issue_description = full_parts[3]  # Fourth element
                     try:
                         print(f"Suggesting fix for code snippet: \"{code_snippet[:50]}...\" based on issue: \"{issue_description[:50]}...\"")
                         suggestion = active_llm_client.suggest_code_modification(code_snippet, issue_description)
@@ -298,9 +320,9 @@ def run_cli():
                             print(suggestion)
                             print("--- End of Suggestion ---")
                         else:
-                            print("No code modification suggested or the response was empty.")
+                            print("No fix suggested or the response was empty.")
                     except GeminiModificationError as e:
-                        print(f"Error suggesting fix: {e}")
+                        print(f"Modification Error: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
                     except LLMConnectorError as e:
@@ -311,11 +333,11 @@ def run_cli():
                     print("Usage: ai suggest_fix \"<code_snippet>\" \"<issue_description>\"")
             elif command == "ai" and args and args[0].lower() == "suggest_fix_file":
                 if not active_llm_client:
-                    print("AI client not available. Please check configuration.")
+                    print("No LLM connector available.")
                     continue
                 if len(args) >= 3: # Expecting sub-command, filepath, and issue_description
                     file_path = args[1]
-                    issue_description = " ".join(args[2:])
+                    issue_description = strip_quotes(" ".join(args[2:]))
                     try:
                         print(f"Suggesting fix for file: \"{file_path}\" based on issue: \"{issue_description[:50]}...\"")
                         code_content = local_files.read_file(file_path)
@@ -325,11 +347,11 @@ def run_cli():
                             print(suggestion)
                             print("--- End of Suggestion ---")
                         else:
-                            print("No code modification suggested or the response was empty.")
+                            print("No fix suggested or the response was empty.")
                     except FileNotFoundError:
                         print(f"Error: File not found: {file_path}")
                     except GeminiModificationError as e:
-                        print(f"Error suggesting fix for file: {e}")
+                        print(f"Modification Error: {e}")
                     except GeminiApiError as e:
                         print(f"API Error: {e}")
                     except LLMConnectorError as e:

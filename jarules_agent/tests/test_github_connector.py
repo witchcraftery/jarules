@@ -388,9 +388,11 @@ class TestGitHubClient(unittest.TestCase):
             {"path": "docs/file2.md", "mode": "100644", "type": "blob", "sha": "blob_sha_file2"}
         ]
         # Check the tree creation call specifically for the tree elements
-        # The third call to mock_request is tree creation (index 2)
-        actual_tree_call_args = mock_request.call_args_list[3] # POST for tree
-        self.assertEqual(actual_tree_call_args[2]['json']['tree'], expected_tree_elements)
+        # The fourth call to mock_request is tree creation (index 3)
+        actual_tree_call = mock_request.call_args_list[3] # POST for tree
+        # Extract the json parameter from the call kwargs
+        actual_tree_json = actual_tree_call.kwargs['json'] if 'json' in actual_tree_call.kwargs else actual_tree_call[1]['json']
+        self.assertEqual(actual_tree_json['tree'], expected_tree_elements)
 
 
     @patch('jarules_agent.connectors.github_connector.GitHubClient.get_branch_sha')

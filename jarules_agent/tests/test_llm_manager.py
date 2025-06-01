@@ -73,7 +73,7 @@ class TestLLMManager(unittest.TestCase):
     @patch('jarules_agent.core.llm_manager.GeminiClient') # Patch where GeminiClient is looked up by LLMManager
     @patch('os.path.exists')
     @patch('builtins.open')
-    def test_get_llm_connector_gemini_success(self, mock_file_open, mock_path_exists, MockGeminiClientClass, mock_env):
+    def test_get_llm_connector_gemini_success(self, mock_file_open, mock_path_exists, MockGeminiClientClass):
         mock_path_exists.return_value = True
         gemini_config = {
             "id": "gemini_test_conn", "provider": "gemini", "enabled": True, 
