@@ -35,136 +35,124 @@ This document provides guidance for ongoing development tasks, particularly thos
 
 6.  **`jarules_agent/tests/test_gemini_api.py` Reviewed**:
     *   Existing tests reviewed and deemed largely compatible with changes to `GeminiClient.__init__` due to its fallback mechanisms for API key handling.
-
-### Pending Task: Updating `jarules_agent/tests/test_cli.py`
-
-**Context**:
-The introduction of `LLMManager` in `jarules_agent/ui/cli.py` means that the CLI no longer instantiates `GeminiClient` directly. Instead, it gets an LLM client instance from the `LLMManager`. Consequently, the unit tests in `test_cli.py` that test AI commands need to be updated to reflect this change in architecture.
-
-**Problem Encountered**:
-Automated tooling (`replace_with_git_merge_diff`, `overwrite_file_with_block`) has consistently failed to apply the necessary extensive modifications to `test_cli.py`. Even minimal diagnostic changes to this file also failed, suggesting a deeper issue with tool interaction for this specific file.
-
-**Required Changes for `jarules_agent/tests/test_cli.py` (Manual or Future Tooling):**
-
-1.  **Update Imports**:
-    *   Add:
-        ```python
-        from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
-        from jarules_agent.connectors.base_llm_connector import BaseLLMConnector 
-        # Keep existing Gemini-specific error imports if tests catch them directly
-        ```
-
-2.  **Update Mocking Strategy for AI Command Tests (and relevant setup tests)**:
-    *   Tests that previously used `@patch('jarules_agent.ui.cli.GeminiClient')` should now use `@patch('jarules_agent.ui.cli.LLMManager')`.
-    *   The mocked `LLMManager` class's `return_value` (representing the `LLMManager` instance) needs its `get_llm_connector` method to be mocked.
-    *   This `get_llm_connector` mock should be configured to return a `MagicMock` instance that simulates an actual LLM client (e.g., `MagicMock(spec=GeminiClient)` or `MagicMock(spec=BaseLLMConnector)`).
-    *   The methods of this inner LLM client mock (e.g., `generate_code`, `explain_code`) should then be configured for specific test assertions (return values, side effects like raising errors).
-
-3.  **Example of Refactored Test Method Structure**:
-
-    ```python
-    # Inside TestCLI class in test_cli.py
-
-    # Helper (if not already present or adapt existing setup for mocks)
-    def _setup_cli_mocks(self, MockLLMManagerClass, MockGitHubClient, llm_client_spec=BaseLLMConnector, llm_model_name="mocked-model"):
-        MockGitHubClient.return_value = MagicMock()
-        mock_llm_manager_instance = MockLLMManagerClass.return_value
-        mock_active_llm_client = MagicMock(spec=llm_client_spec)
-        if llm_model_name is not None: # model_name could be None if get_llm_connector fails
-             mock_active_llm_client.model_name = llm_model_name
-        mock_llm_manager_instance.get_llm_connector.return_value = mock_active_llm_client
-        return mock_llm_manager_instance, mock_active_llm_client
-
-    # Refactored startup test for API key error
-    @patch('jarules_agent.ui.cli.LLMManager') 
-    @patch('jarules_agent.ui.cli.GitHubClient') 
-    def test_startup_llm_connector_error_handling(self, MockGitHubClient, MockLLMManagerClass): 
-        MockGitHubClient.return_value = MagicMock() 
-        mock_llm_manager_instance = MockLLMManagerClass.return_value
-        # Simulate error during get_llm_connector call
-        mock_llm_manager_instance.get_llm_connector.side_effect = GeminiApiKeyError("Test API Key Error from LLMManager path")
-        
-        run_cli() 
-        
-        output = self.mock_stdout.getvalue() 
-        self.assertIn("API Key Error for LLM 'gemini_flash_default': Test API Key Error from LLMManager path", output) 
-        self.assertIn("AI features will be unavailable.", output)
-        self.assertNotIn("Successfully loaded LLM", output)
-
-    # Refactored AI command test (example for gencode)
-    @patch('builtins.input')
-    @patch('jarules_agent.ui.cli.LLMManager')
-    @patch('jarules_agent.ui.cli.GitHubClient')
-    def test_ai_gencode_success(self, MockGitHubClient, MockLLMManagerClass, mock_input):
-        # Use the helper to set up common mocks
-        mock_llm_manager_instance, mock_llm_client = self._setup_cli_mocks(
-            MockLLMManagerClass, MockGitHubClient, llm_client_spec=GeminiClient
-        )
-        
-        mock_llm_client.generate_code.return_value = "def hello():\n  print('Hello Manager')"
-        mock_input.side_effect = ["ai gencode \"python hello\"", "exit"] # User input
-        
-        run_cli() # Run the CLI main loop
-        
-        output = self.mock_stdout.getvalue()
-        # Check that LLMManager was asked for the default connector
-        mock_llm_manager_instance.get_llm_connector.assert_called_once_with("gemini_flash_default")
-        # Check that the connector's method was called
-        mock_llm_client.generate_code.assert_called_once_with("python hello")
-        self.assertIn("--- Generated Code ---", output)
-        self.assertIn("def hello():\n  print('Hello Manager')", output)
-    ```
-
-4.  **Specific Tests to Update (apply the above pattern to all these):**
-    *   `test_startup_gemini_api_key_error` (should be renamed e.g. `test_startup_llm_manager_init_failure`)
-    *   All tests for AI commands:
-        *   `test_ai_gencode_success`
-        *   `test_ai_gencode_empty_result`
-        *   `test_ai_gencode_api_error`
-        *   `test_ai_gencode_llm_connector_error` (newly added in the full test file attempt)
-        *   `test_ai_gencode_generation_error`
-        *   `test_ai_gencode_no_prompt`
-        *   `test_ai_explain_success`
-        *   `test_ai_explain_empty_result`
-        *   `test_ai_explain_api_error`
-        *   `test_ai_explain_explanation_error`
-        *   `test_ai_explain_no_snippet`
-        *   `test_ai_explain_file_success` (also needs `local_files.read_file` mock)
-        *   `test_ai_explain_file_read_not_found`
-        *   `test_ai_explain_file_api_error`
-        *   `test_ai_explain_file_no_path`
-        *   `test_ai_suggest_fix_success`
-        *   `test_ai_suggest_fix_empty_result`
-        *   `test_ai_suggest_fix_api_error`
-        *   `test_ai_suggest_fix_modification_error`
-        *   `test_ai_suggest_fix_not_enough_args`
-        *   `test_ai_suggest_fix_file_success` (also needs `local_files.read_file` mock)
-        *   `test_ai_suggest_fix_file_read_not_found`
-        *   `test_ai_suggest_fix_file_api_error`
-        *   `test_ai_suggest_fix_file_no_path_or_issue`
-    *   Tests for non-AI commands (`ls`, `read`, `write`, `gh_ls`, `gh_read`) also need their `@patch('jarules_agent.ui.cli.GeminiClient')` changed to `@patch('jarules_agent.ui.cli.LLMManager')` and the mock setup adjusted to ensure the LLM part initializes quietly and doesn't interfere.
-
-**Recommendation**:
-Due to the tooling issues, these changes to `test_cli.py` should be applied manually or with alternative editing tools outside of this current interactive environment if the automated tools continue to fail. The file will be committed in its current (outdated) state, and this guide serves as the reference for the necessary updates.
+7.  **`jarules_agent/tests/test_cli.py` Updated (Manual Task)**:
+    *   The test suite for the CLI (`test_cli.py`) was manually updated to align with the new `LLMManager` architecture. This involved refactoring test setup, mock strategies (changing from `GeminiClient` to `LLMManager`), and ensuring all AI command tests correctly simulate the CLI's interaction with the `LLMManager` for obtaining LLM connector instances. This task was completed manually due to previous issues with automated tooling for this specific file.
 
 ---
 Future sections can be added to this guide as new complex tasks arise.
 
-### Detailed Plan for Updating `jarules_agent/tests/test_cli.py` (Generated 2024-03-11)
+## Phase: UI Development (Electron + Vue.js) - Roadmap
 
-1. *Update imports in `jarules_agent/tests/test_cli.py`*:
-    - Add `from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError`.
-    - Add `from jarules_agent.connectors.base_llm_connector import BaseLLMConnector`.
-2. *Update mocking strategy for AI command tests in `jarules_agent/tests/test_cli.py`*:
-    - Change `@patch('jarules_agent.ui.cli.GeminiClient')` to `@patch('jarules_agent.ui.cli.LLMManager')`.
-    - Mock the `get_llm_connector` method of the `LLMManager` instance to return a `MagicMock(spec=BaseLLMConnector)` or `MagicMock(spec=GeminiClient)`.
-    - Configure the methods of this inner LLM client mock (e.g., `generate_code`, `explain_code`) for specific test assertions.
-3. *Refactor test methods in `jarules_agent/tests/test_cli.py`*:
-    - Implement the `_setup_cli_mocks` helper method as described in the implementation guide.
-    - Update `test_startup_gemini_api_key_error` (renaming it to `test_startup_llm_manager_init_failure` or similar, e.g. `test_startup_llm_connector_error_handling` as per the guide's example).
-    - Refactor all AI command tests (`test_ai_gencode_*`, `test_ai_explain_*`, `test_ai_suggest_fix_*`) using the new mocking strategy and helper method. This includes tests for success, empty results, API errors, connector errors, generation errors, and missing arguments/file issues.
-    - Adjust non-AI command tests (`ls`, `read`, `write`, `gh_ls`, `gh_read`) to use `@patch('jarules_agent.ui.cli.LLMManager')` and ensure the LLM mock setup doesn't interfere.
-4. *Run tests*:
-    - After applying the changes, run the test suite to ensure all tests pass and the updates correctly reflect the new architecture.
-5. *Submit the changes*:
-    - Commit the updated `test_cli.py` and `IMPLEMENTATION_GUIDE.md` with a message describing the refactoring and the guide update.
+**Overall Goal:**
+To develop an interactive desktop application for JaRules, providing a rich user experience similar to modern chat-based AI assistants but tailored for software development tasks. This includes capabilities for displaying conversations with the agent, viewing and navigating project files, examining code, and potentially interacting with other development-related outputs.
+
+**Technology Stack Summary:**
+*   **Framework:** Electron for the desktop application shell.
+*   **UI Library:** Vue.js (version 3) for building the user interface components.
+*   **Build Tool:** Vite for fast development and optimized builds of the Vue.js frontend.
+*   **Main Process:** Node.js (as part of Electron).
+*   **Communication:** IPC (Inter-Process Communication) between Electron's main and renderer processes; a chosen method (e.g., child process, local HTTP, ZeroMQ) for Electron-to-Python core communication.
+
+---
+
+### Phase 1: Basic Electron App with Vue.js Setup (Completed)
+
+This foundational phase focused on establishing the project structure and core plumbing for the Electron-based UI.
+
+**Key Achievements:**
+*   Created the `jarules_electron_vue_ui` project directory.
+*   Initialized `package.json` and installed all core dependencies: Electron, Vue.js 3, Vite, `@vitejs/plugin-vue`, and `concurrently`.
+*   Configured Vite (`vite.config.js`) for Vue.js development.
+*   Implemented the Electron main process script (`main.js`) to:
+    *   Create and manage the main browser window.
+    *   Handle application lifecycle events.
+    *   Load content from Vite's dev server in development mode.
+    *   Load built static files (from `dist/index.html`) in production mode.
+    *   Integrate a `preload.js` script.
+*   Created a basic Electron `preload.js` for context bridging (initially displaying version info).
+*   Set up `index.html` as the host page for the Vue.js application, with a root `<div>` for Vue to mount.
+*   Developed the Vue.js application entry point (`src/main.js`) to initialize and mount the root Vue component.
+*   Created a simple root Vue component (`src/App.vue`) to display a welcome message and confirm integration.
+*   Added NPM scripts to `package.json` for development (`dev`), building (`build:vite`), and running in a production-like environment (`start:prod`).
+*   Established a comprehensive `.gitignore` file for the UI project.
+*   Created `jarules_electron_vue_ui/README_UI.md` with setup, build, and run instructions, pointing to this guide for the detailed roadmap.
+
+---
+
+### Phase 2: Implement Core Chat UI & Functionality
+
+This phase will focus on building the primary chat interface components.
+
+**Planned Steps:**
+*   **Chat Message Display:** Develop Vue components to render a list of chat messages, distinguishing between user prompts and agent responses.
+*   **User Input:** Create a multi-line text input field for users to type their messages and a "Send" button.
+*   **Basic IPC for Chat:**
+    *   Implement IPC communication from the Vue.js renderer process (UI) to the Electron main process when the user sends a message.
+    *   The Electron main process will initially receive the message and (for now) can send back a mocked or echo response via IPC to the renderer process.
+*   **Message Rendering in UI:** Ensure sent messages and (mocked) responses are correctly displayed in the chat message area.
+*   **Markdown Support:** Integrate a library (e.g., `marked.js` or similar) to render agent responses as Markdown, allowing for rich text formatting, links, lists, etc.
+*   **Syntax Highlighting for Code Blocks:** Use a library (e.g., `highlight.js`, `prism.js`) to automatically detect and apply syntax highlighting to code blocks within Markdown-rendered agent responses.
+*   **"Copy Code" Functionality:** Add a button to easily copy the content of code blocks displayed in the chat.
+*   **Styling:** Apply initial styling to make the chat interface clean and usable.
+
+---
+
+### Phase 3: Integrate with Python Agent Core
+
+Bridge the gap between the Electron UI and the existing Python-based JaRules agent.
+
+**Planned Steps:**
+*   **Communication Channel:**
+    *   Research and select the most suitable method for robust communication between the Electron main process (Node.js) and the Python agent core. Options include:
+        *   Managing the Python agent as a child process and using `stdin`/`stdout`.
+        *   A local HTTP server/client setup (Python server, Electron client).
+        *   A message queue system like ZeroMQ.
+    *   Implement the chosen communication channel.
+*   **Message Forwarding:**
+    *   Relay user messages received via IPC in the Electron main process to the Python agent core through the established channel.
+*   **Response Handling:**
+    *   Receive responses from the Python agent in the Electron main process.
+    *   Forward these responses to the Vue.js UI via IPC for display.
+*   **Asynchronous Operations & UI State:**
+    *   Implement UI indicators for when the agent is processing a request (e.g., loading spinners, disabled input).
+    *   Handle potential errors or timeouts in communication.
+
+---
+
+### Phase 4: Develop File Explorer and Code Viewer Panes/Columns
+
+Expand the UI beyond chat to include development-specific views, moving towards the multi-column vision.
+
+**Planned Steps:**
+*   **Multi-Column Layout Design:** Define and implement a basic multi-column or multi-pane layout structure for the application window (e.g., using CSS Flexbox/Grid or a UI component library).
+*   **File Explorer Component:**
+    *   Develop a Vue component to display a tree-like view of a project's file system.
+    *   Initially, this might interact with a mocked file system or use Electron's capabilities to access a user-specified local directory.
+    *   Allow navigation through directories and selection of files.
+*   **Code Viewer Component:**
+    *   Develop a Vue component to display the content of a file selected in the File Explorer.
+    *   Integrate basic syntax highlighting for various programming languages in this viewer.
+    *   (Future Consideration): Explore embedding a more powerful editor component like Monaco Editor (which powers VS Code) for richer features like inline diffs, better search, etc.
+*   **Inter-Pane Communication:** Ensure that selecting a file in the explorer updates the content in the code viewer.
+
+---
+
+### Phase 5: State Management and Advanced Features
+
+Refine the application, introduce robust state management, and explore more advanced SE tooling integrations.
+
+**Planned Steps:**
+*   **Global State Management:** Integrate a state management library like Pinia (the official Vue.js recommendation) to manage application-wide state, such as:
+    *   Current chat history.
+    *   Open files or tabs.
+    *   User preferences and settings.
+    *   Agent status.
+*   **Additional UI Panes/Tools:** Based on the "four-column" vision, design and implement other useful panes:
+    *   Terminal emulator.
+    *   Test execution and results display.
+    *   Task lists or issue tracking integration.
+    *   Agent tool-specific UIs.
+*   **User Settings:** Implement a way for users to configure settings (e.g., API keys if needed by UI, theme preferences).
+*   **Theming:** Explore light/dark mode themes for the UI.
+*   **Performance Optimization:** Profile and optimize UI rendering and communication pathways.
+*   **Packaging & Distribution:** Set up Electron Forge or Electron Builder for creating distributable application packages for different operating systems.

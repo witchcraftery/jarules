@@ -1,0 +1,26 @@
+{
+  "name": "jarules_electron_vue_ui",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "dev:vite": "vite",
+    "dev:electron": "electron .",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "build:vite": "vite build",
+    "start:prod": "npm run build:vite && electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "concurrently": "^9.1.2",
+    "electron": "^36.3.2",
+    "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "vue": "^3.5.16"
+  }
+}
