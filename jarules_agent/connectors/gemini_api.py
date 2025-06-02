@@ -39,6 +39,13 @@ class GeminiClient(BaseLLMConnector):
     """
     DEFAULT_MODEL_NAME = 'gemini-1.5-flash-latest' # A good default, you can change if needed
 
+    @staticmethod
+    def _get_enum_name(enum_value):
+        """Helper to safely get name from enum or return string representation."""
+        if hasattr(enum_value, 'name'):
+            return enum_value.name
+        return str(enum_value)
+
     def __init__(self, model_name: Optional[str] = None, **kwargs: Any):
         """
         Initializes the GeminiClient.
@@ -156,7 +163,7 @@ class GeminiClient(BaseLLMConnector):
             response = self._generate_content_raw([prompt])
             
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                 raise GeminiApiError(f"Prompt blocked by Gemini API. Reason: {response.prompt_feedback.block_reason.name}. Details: {response.prompt_feedback}")
+                 raise GeminiApiError(f"Prompt blocked by Gemini API. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}. Details: {response.prompt_feedback}")
 
             if response.candidates and response.candidates[0].content.parts:
                 return "".join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
@@ -216,7 +223,7 @@ class GeminiClient(BaseLLMConnector):
 
             # Check for safety blocks or problematic finish reasons first
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                error_msg = f"Code generation prompt blocked by Gemini API. Reason: {response.prompt_feedback.block_reason.name}. Details: {response.prompt_feedback}"
+                error_msg = f"Code generation prompt blocked by Gemini API. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}. Details: {response.prompt_feedback}"
                 print(error_msg)
                 raise GeminiCodeGenerationError(error_msg)
 
@@ -228,9 +235,9 @@ class GeminiClient(BaseLLMConnector):
                 raise GeminiCodeGenerationError(error_msg)
 
             candidate = response.candidates[0]
-            if candidate.finish_reason not in [genai.types.FinishReason.STOP, genai.types.FinishReason.MAX_TOKENS]:
+            if candidate.finish_reason not in [genai.protos.Candidate.FinishReason.STOP, genai.protos.Candidate.FinishReason.MAX_TOKENS]:
                 # Other reasons include SAFETY, RECITATION, OTHER, UNKNOWN, UNSET
-                error_msg = f"Code generation stopped unexpectedly. Finish Reason: {candidate.finish_reason.name}. Details: {candidate.safety_ratings if candidate.safety_ratings else 'N/A'}"
+                error_msg = f"Code generation stopped unexpectedly. Finish Reason: {self._get_enum_name(candidate.finish_reason)}. Details: {candidate.safety_ratings if candidate.safety_ratings else 'N/A'}"
                 print(error_msg)
                 raise GeminiCodeGenerationError(error_msg)
 
@@ -319,7 +326,7 @@ class GeminiClient(BaseLLMConnector):
             response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                error_msg = f"Code explanation prompt blocked by Gemini API. Reason: {response.prompt_feedback.block_reason.name}. Details: {response.prompt_feedback}"
+                error_msg = f"Code explanation prompt blocked by Gemini API. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}. Details: {response.prompt_feedback}"
                 print(error_msg)
                 raise GeminiExplanationError(error_msg)
 
@@ -329,8 +336,8 @@ class GeminiClient(BaseLLMConnector):
                 raise GeminiExplanationError(error_msg)
             
             candidate = response.candidates[0]
-            if candidate.finish_reason not in [genai.types.FinishReason.STOP, genai.types.FinishReason.MAX_TOKENS]:
-                error_msg = f"Code explanation stopped unexpectedly. Finish Reason: {candidate.finish_reason.name}. Details: {candidate.safety_ratings if candidate.safety_ratings else 'N/A'}"
+            if candidate.finish_reason not in [genai.protos.Candidate.FinishReason.STOP, genai.protos.Candidate.FinishReason.MAX_TOKENS]:
+                error_msg = f"Code explanation stopped unexpectedly. Finish Reason: {self._get_enum_name(candidate.finish_reason)}. Details: {candidate.safety_ratings if candidate.safety_ratings else 'N/A'}"
                 print(error_msg)
                 raise GeminiExplanationError(error_msg)
 
@@ -396,7 +403,7 @@ class GeminiClient(BaseLLMConnector):
             response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                error_msg = f"Code modification prompt blocked. Reason: {response.prompt_feedback.block_reason.name}"
+                error_msg = f"Code modification prompt blocked. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}"
                 print(error_msg)
                 raise GeminiModificationError(error_msg)
 
@@ -406,8 +413,8 @@ class GeminiClient(BaseLLMConnector):
                 raise GeminiModificationError(error_msg)
 
             candidate = response.candidates[0]
-            if candidate.finish_reason not in [genai.types.FinishReason.STOP, genai.types.FinishReason.MAX_TOKENS]:
-                error_msg = f"Code modification stopped unexpectedly. Finish Reason: {candidate.finish_reason.name}"
+            if candidate.finish_reason not in [genai.protos.Candidate.FinishReason.STOP, genai.protos.Candidate.FinishReason.MAX_TOKENS]:
+                error_msg = f"Code modification stopped unexpectedly. Finish Reason: {self._get_enum_name(candidate.finish_reason)}"
                 print(error_msg)
                 raise GeminiModificationError(error_msg)
 
