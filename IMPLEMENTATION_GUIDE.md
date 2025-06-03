@@ -1,4 +1,4 @@
-# Implementation Guide
+# JaRules Implementation Guide
 
 This document provides guidance for ongoing development tasks, particularly those that may require manual intervention or were complex to achieve with current tooling.
 
