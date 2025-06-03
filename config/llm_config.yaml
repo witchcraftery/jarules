@@ -29,28 +29,64 @@ llm_configs:
 
   # --- Placeholder Examples (Non-Functional until connectors are built) ---
 
-  - id: "ollama_codellama_7b_local"
-    provider: "ollama" # Future: Maps to an OllamaClient
-    description: "Placeholder for local CodeLlama 7B via Ollama."
-    enabled: false # Not yet functional
-    model_name: "codellama:7b" # Standard Ollama model tag
+  - id: "ollama_llama3_default"
+    provider: "ollama"
+    description: "Default local Llama3 model via Ollama."
+    enabled: true
+    model_name: "llama3" # Or your preferred default Llama model
     base_url: "http://localhost:11434" # Typical Ollama local endpoint
-    default_system_prompt: "You are CodeLlama, a powerful coding assistant running locally."
-    generation_params:
-      temperature: 0.5
-      # Ollama might have different param names, e.g., num_ctx, top_k, top_p
-
-  - id: "openrouter_mistral_7b"
-    provider: "openrouter" # Future: Maps to an OpenRouterClient
-    description: "Placeholder for Mistral 7B via OpenRouter."
-    enabled: false # Not yet functional
-    model_name: "mistralai/mistral-7b-instruct" # Example OpenRouter model ID
-    api_key_env: "OPENROUTER_API_KEY"
-    # OpenRouter uses a 'source_of_truth' field or similar for routing if not by model_name
-    # http_referer: "http://localhost" # Often required by OpenRouter
-    default_system_prompt: "You are a helpful AI assistant accessed via OpenRouter."
+    default_system_prompt: "You are a helpful AI assistant." # Optional
     generation_params:
       temperature: 0.7
+      num_ctx: 2048 # Context window size
+      # top_k: 40
+      # top_p: 0.9
+
+  - id: "ollama_codellama_7b_instruct"
+    provider: "ollama"
+    description: "Local CodeLlama 7B Instruct model via Ollama for code generation."
+    enabled: true
+    model_name: "codellama:7b-instruct" # Or codellama:latest if preferred
+    base_url: "http://localhost:11434"
+    default_system_prompt: |
+      You are an expert AI coding assistant.
+      Please provide only the code requested by the user, without any additional explanatory text,
+      markdown formatting, or language indicators (like ```python) surrounding the code block.
+      If you need to include comments, ensure they are within the code block itself (e.g., using # for Python).
+    generation_params:
+      temperature: 0.2
+      num_ctx: 4096 # Larger context for code
+      # stop: ["
+```
+", "
+```python
+"] # Example stop sequences for code
+
+  - id: "openrouter_mistralai_mistral_7b_instruct" # More specific ID
+    provider: "openrouter"
+    description: "Mistral 7B Instruct via OpenRouter."
+    enabled: true
+    model_name: "mistralai/mistral-7b-instruct" # Exact model ID from OpenRouter
+    api_key_env: "OPENROUTER_API_KEY"
+    http_referer: "https://github.com/JaRules/jarules" # Example, use actual or desired value
+    app_name: "JaRules Agent" # Example, use actual or desired value
+    default_system_prompt: "You are a helpful AI assistant accessed via OpenRouter." # Optional
+    generation_params:
+      temperature: 0.7
+      # max_tokens: 1024 # Example
+
+  - id: "openrouter_openai_gpt_3_5_turbo"
+    provider: "openrouter"
+    description: "OpenAI GPT-3.5 Turbo via OpenRouter."
+    enabled: true
+    model_name: "openai/gpt-3.5-turbo" # Exact model ID from OpenRouter
+    api_key_env: "OPENROUTER_API_KEY"
+    http_referer: "https://github.com/JaRules/jarules" # Example
+    app_name: "JaRules Agent" # Example
+    default_system_prompt: "You are OpenAI's GPT-3.5-Turbo, accessed via OpenRouter." # Optional
+    generation_params:
+      temperature: 0.7
+      # top_p: 0.9
 
 # --- End of Placeholder Examples ---
 
