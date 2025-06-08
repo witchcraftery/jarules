@@ -29,28 +29,53 @@ llm_configs:
 
   # --- Placeholder Examples (Non-Functional until connectors are built) ---
 
-  - id: "ollama_codellama_7b_local"
-    provider: "ollama" # Future: Maps to an OllamaClient
-    description: "Placeholder for local CodeLlama 7B via Ollama."
-    enabled: false # Not yet functional
-    model_name: "codellama:7b" # Standard Ollama model tag
-    base_url: "http://localhost:11434" # Typical Ollama local endpoint
-    default_system_prompt: "You are CodeLlama, a powerful coding assistant running locally."
+  - id: "ollama_default_local" # Updated ID for a more generic default
+    provider: "ollama"        # Maps to the OllamaConnector
+    description: "Default local LLM via Ollama (e.g., Llama 3)."
+    enabled: true             # Enable for development
+    model_name: "llama3"      # Default model, can be overridden
+    api_base_url: "http://localhost:11434" # Standard Ollama local endpoint
+    # api_key_env: null # Ollama typically doesn't require an API key for local instances
+    default_system_prompt: "You are a helpful AI assistant running on a local Ollama instance."
     generation_params:
-      temperature: 0.5
-      # Ollama might have different param names, e.g., num_ctx, top_k, top_p
+      temperature: 0.6
+      # Ollama specific parameters can be added here, e.g.:
+      # num_ctx: 4096 # Example context window size
+      # top_k: 40
+      # top_p: 0.9
+      # Ensure these match what Ollama API expects if you uncomment them
 
-  - id: "openrouter_mistral_7b"
-    provider: "openrouter" # Future: Maps to an OpenRouterClient
-    description: "Placeholder for Mistral 7B via OpenRouter."
-    enabled: false # Not yet functional
-    model_name: "mistralai/mistral-7b-instruct" # Example OpenRouter model ID
-    api_key_env: "OPENROUTER_API_KEY"
-    # OpenRouter uses a 'source_of_truth' field or similar for routing if not by model_name
-    # http_referer: "http://localhost" # Often required by OpenRouter
-    default_system_prompt: "You are a helpful AI assistant accessed via OpenRouter."
+  - id: "openrouter_default" # Updated ID for a more generic default
+    provider: "openrouter"    # Maps to the OpenRouterConnector
+    description: "Default OpenRouter configuration (e.g., using a capable free model)."
+    enabled: true             # Enable for development
+    model_name: "gryphe/mythomax-l2-13b" # A good default free model
+    api_key_env_var: "OPENROUTER_API_KEY" # Environment variable for the API key
+    api_base_url: "https://openrouter.ai/api/v1" # Default OpenRouter API
+    http_referer: "http://localhost:3000" # Example: Update with your actual site URL or app name
+    request_timeout: 45 # Seconds
+    default_system_prompt: "You are an advanced AI assistant accessed via OpenRouter."
     generation_params:
       temperature: 0.7
+      # max_tokens: 1024 # Example, can be overridden
+      # top_p: 0.9
+      # Add other OpenRouter compatible generation parameters as needed
+
+  - id: "claude_default"
+    provider: "claude"        # Maps to the ClaudeConnector
+    description: "Default Anthropic Claude configuration (e.g., Claude 3 Haiku)."
+    enabled: true
+    model_name: "claude-3-haiku-20240307" # Cost-effective and fast model
+    api_key_env_var: "ANTHROPIC_API_KEY"  # Environment variable for the API key
+    max_tokens: 2048          # Default max tokens for responses
+    request_timeout: 60       # Seconds
+    anthropic_version_header: "2023-06-01" # Recommended by Anthropic for some features
+    default_system_prompt: "You are a helpful and friendly AI assistant powered by Anthropic Claude."
+    generation_params:        # Parameters compatible with Anthropic API
+      temperature: 0.7
+      # top_k: 5
+      # top_p: 0.9
+      # Other Claude-specific params like "stop_sequences" can be added here
 
 # --- End of Placeholder Examples ---
 

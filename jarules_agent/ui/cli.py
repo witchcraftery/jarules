@@ -55,6 +55,11 @@ def display_help():
     print("    ai explain_file <filepath>   - Explains the content of the specified file.")
     print("    ai suggest_fix \"<code_snippet>\" \"<issue>\" - Suggests a fix for the code snippet based on the issue.")
     print("    ai suggest_fix_file <filepath> \"<issue>\" - Suggests a fix for the file content based on the issue.")
+    print("\n  Model Management:")
+    print("    set-model <provider_id>      - Sets the active LLM provider configuration.")
+    print("                                   Example: set-model ollama_default_local")
+    print("    get-model                    - Displays the ID and details of the currently active LLM provider.")
+    print("    clear-model                  - Clears the persisted active model selection, reverting to default.")
     print("\n  General:")
     print("    help                         - Prints this list of available commands.")
     print("    exit / quit                  - Exits the CLI.\n")
@@ -90,32 +95,23 @@ def run_cli():
         print("LLMManager initialized successfully.")
     except LLMConfigError as e: # LLMConfigError should also be available
         print(f"Error initializing LLMManager: {e}. AI features will be unavailable.")
-        return 
+        llm_manager = None # Ensure llm_manager is None if init fails
     except Exception as e:
         print(f"A critical error occurred initializing LLMManager: {e}. AI features will be unavailable.")
-        return
+        llm_manager = None # Ensure llm_manager is None if init fails
 
-    active_llm_client = None 
-    default_llm_config_id = "gemini_flash_default" 
+    if llm_manager and llm_manager.active_provider_id:
+        try:
+            # Attempt to load the active client to confirm it's working.
+            client = llm_manager.get_llm_client() # Get the active client
+            print(f"LLMManager initialized. Active model ID: '{llm_manager.active_provider_id}' (Model: {client.model_name})")
+        except LLMManagerError as e:
+            print(f"LLMManager initialized, but failed to load active model '{llm_manager.active_provider_id}': {e}")
+        except Exception as e:
+            print(f"LLMManager initialized. Unexpected error loading active model '{llm_manager.active_provider_id}': {e}")
+    elif llm_manager:
+         print("LLMManager initialized, but no active model is set. Use 'set-model <provider_id>' or define 'default_provider' in config.")
 
-    try:
-        active_llm_client = llm_manager.get_llm_connector(default_llm_config_id)
-        if active_llm_client:
-            print(f"Successfully loaded LLM: '{default_llm_config_id}' (Model: {active_llm_client.model_name})")
-        else: 
-            print(f"Warning: Could not load default LLM '{default_llm_config_id}'. AI features may be limited.")
-    except GeminiApiKeyError as e: 
-        print(f"API Key Error for LLM '{default_llm_config_id}': {e}. AI features will be unavailable.")
-        return 
-    except LLMProviderNotImplementedError as e:
-        print(f"LLM Provider Error: {e}. AI features for this provider are unavailable.")
-        return
-    except LLMConfigError as e: 
-        print(f"LLM Configuration Error: {e}. AI features may be unavailable.")
-        return
-    except Exception as e: 
-        print(f"An unexpected error occurred while loading LLM '{default_llm_config_id}': {e}. AI features will be unavailable.")
-        return
 
     display_help()
 
@@ -222,146 +218,182 @@ def run_cli():
                         print("Usage: gh_read <owner>/<repo>/<file_path>")
                 else:
                     print("Usage: gh_read <owner>/<repo>/<file_path>")
-            elif command == "ai" and args and args[0].lower() == "gencode":
-                if not active_llm_client:
-                    print("No LLM connector available.")
+            elif command == "set-model":
+                if not llm_manager:
+                    print("LLMManager not available.")
                     continue
-                if len(args) > 1:
-                    # Join all arguments and strip outer quotes
-                    prompt_string = strip_quotes(" ".join(args[1:]))
+                if len(args) == 1:
+                    provider_id = args[0]
                     try:
-                        print(f"Generating code for prompt: \"{prompt_string}\"...")
-                        generated_code = active_llm_client.generate_code(prompt_string)
-                        if generated_code:
-                            print("\n--- Generated Code ---")
-                            print(generated_code)
-                            print("--- End of Generated Code ---")
-                        else:
-                            print("No code generated or the response was empty.")
-                    except GeminiCodeGenerationError as e: # Specific error from Gemini
-                        print(f"Code Generation Error: {e}")
-                    except GeminiApiError as e: # Specific error from Gemini
-                        print(f"API Error: {e}")
-                    except LLMConnectorError as e: # Broader error from any LLM connector
-                        print(f"LLM Connector Error: {e}")
+                        llm_manager.set_active_provider(provider_id)
+                        # Optionally, try to get the client to confirm it loads
+                        client = llm_manager.get_llm_client()
+                        print(f"Active model set to: '{provider_id}' (Model: {client.model_name}, Provider: {client.config.get('provider')})")
+                    except ValueError as e:
+                        print(f"Error setting model: {e}")
+                    except LLMManagerError as e:
+                        print(f"Error loading new active model '{provider_id}': {e}")
                     except Exception as e:
-                        print(f"An unexpected error occurred during code generation: {e}")
+                        print(f"An unexpected error occurred setting model '{provider_id}': {e}")
                 else:
-                    print("Usage: ai gencode \"<prompt_text>\"")
-            elif command == "ai" and args and args[0].lower() == "explain":
-                if not active_llm_client:
-                    print("No LLM connector available.")
+                    print("Usage: set-model <provider_id>")
+            elif command == "get-model":
+                if not llm_manager:
+                    print("LLMManager not available.")
                     continue
-                if len(args) > 1:
-                    # Join all arguments and strip outer quotes
-                    code_snippet = strip_quotes(" ".join(args[1:]))
-                    try:
-                        print(f"Explaining code snippet: \"{code_snippet[:50]}...\"")
-                        explanation = active_llm_client.explain_code(code_snippet)
-                        if explanation:
-                            print("\n--- Code Explanation ---")
-                            print(explanation)
-                            print("--- End of Explanation ---")
-                        else:
-                            print("No explanation generated or the response was empty.")
-                    except GeminiExplanationError as e:
-                        print(f"Explanation Error: {e}")
-                    except GeminiApiError as e:
-                        print(f"API Error: {e}")
-                    except LLMConnectorError as e:
-                        print(f"LLM Connector Error: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred during code explanation: {e}")
+                if llm_manager.active_provider_id:
+                    active_id = llm_manager.active_provider_id
+                    config = llm_manager.get_available_configs().get(active_id)
+                    if config:
+                        print(f"Currently active model configuration:")
+                        print(f"  ID: {active_id}")
+                        print(f"  Provider: {config.get('provider')}")
+                        print(f"  Model Name: {config.get('model_name')}")
+                        print(f"  Description: {config.get('description')}")
+                    else: # Should not happen if active_provider_id is valid
+                        print(f"Active model ID: '{active_id}' (details not found - inconsistency?).")
                 else:
-                    print("Usage: ai explain \"<code_snippet>\"")
-            elif command == "ai" and args and args[0].lower() == "explain_file":
-                if not active_llm_client:
-                    print("AI client not available. Please check configuration.")
+                    print("No active model is currently set. Use 'set-model <provider_id>'.")
+            elif command == "clear-model":
+                if not llm_manager:
+                    print("LLMManager not available.")
                     continue
-                if len(args) == 2:
-                    file_path = args[1]
-                    try:
-                        print(f"Explaining file: \"{file_path}\"...")
-                        code_content = local_files.read_file(file_path)
-                        explanation = active_llm_client.explain_code(code_content)
-                        if explanation:
-                            print("\n--- Code Explanation ---")
-                            print(explanation)
-                            print("--- End of Explanation ---")
-                        else:
-                            print("No explanation generated or the response was empty.")
-                    except FileNotFoundError:
-                        print(f"Error: File not found: {file_path}")
-                    except GeminiExplanationError as e:
-                        print(f"Error explaining code from file: {e}")
-                    except GeminiApiError as e:
-                        print(f"API Error: {e}")
-                    except LLMConnectorError as e:
-                        print(f"LLM Connector Error: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred during file explanation: {e}")
-                else:
-                    print("Usage: ai explain_file <filepath>")
-            elif command == "ai" and args and args[0].lower() == "suggest_fix":
-                if not active_llm_client:
-                    print("No LLM connector available.")
+                try:
+                    llm_manager.clear_active_provider_state()
+                    if llm_manager.active_provider_id:
+                         client = llm_manager.get_llm_client() # To display info about the new active (default)
+                         print(f"Active model selection cleared. Now using default: '{llm_manager.active_provider_id}' (Model: {client.model_name})")
+                    else:
+                        print("Active model selection cleared. No default provider configured.")
+                except Exception as e:
+                    print(f"An error occurred while clearing model state: {e}")
+
+            elif command == "ai" and args:
+                if not llm_manager:
+                    print("LLMManager not available. AI commands cannot be used.")
                     continue
-                # Use proper quote-aware parsing for suggest_fix
-                # Re-parse the full input to handle quoted arguments properly
-                full_parts = parse_quoted_args(raw_input)
-                if len(full_parts) >= 4:  # ai, suggest_fix, code_snippet, issue_description
-                    code_snippet = full_parts[2]  # Third element
-                    issue_description = full_parts[3]  # Fourth element
-                    try:
-                        print(f"Suggesting fix for code snippet: \"{code_snippet[:50]}...\" based on issue: \"{issue_description[:50]}...\"")
-                        suggestion = active_llm_client.suggest_code_modification(code_snippet, issue_description)
-                        if suggestion:
-                            print("\n--- Suggested Fix ---")
-                            print(suggestion)
-                            print("--- End of Suggestion ---")
-                        else:
-                            print("No fix suggested or the response was empty.")
-                    except GeminiModificationError as e:
-                        print(f"Modification Error: {e}")
-                    except GeminiApiError as e:
-                        print(f"API Error: {e}")
-                    except LLMConnectorError as e:
-                        print(f"LLM Connector Error: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred while suggesting fix: {e}")
-                else:
-                    print("Usage: ai suggest_fix \"<code_snippet>\" \"<issue_description>\"")
-            elif command == "ai" and args and args[0].lower() == "suggest_fix_file":
-                if not active_llm_client:
-                    print("No LLM connector available.")
+
+                try:
+                    # Get the currently active LLM client for all AI sub-commands
+                    current_llm_client = llm_manager.get_llm_client()
+                except LLMManagerError as e:
+                    print(f"LLM Error: {e}. Cannot perform AI operation.")
                     continue
-                if len(args) >= 3: # Expecting sub-command, filepath, and issue_description
-                    file_path = args[1]
-                    issue_description = strip_quotes(" ".join(args[2:]))
-                    try:
-                        print(f"Suggesting fix for file: \"{file_path}\" based on issue: \"{issue_description[:50]}...\"")
-                        code_content = local_files.read_file(file_path)
-                        suggestion = active_llm_client.suggest_code_modification(code_content, issue_description)
-                        if suggestion:
-                            print("\n--- Suggested Fix ---")
-                            print(suggestion)
-                            print("--- End of Suggestion ---")
-                        else:
-                            print("No fix suggested or the response was empty.")
-                    except FileNotFoundError:
-                        print(f"Error: File not found: {file_path}")
-                    except GeminiModificationError as e:
-                        print(f"Modification Error: {e}")
-                    except GeminiApiError as e:
-                        print(f"API Error: {e}")
-                    except LLMConnectorError as e:
-                        print(f"LLM Connector Error: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred while suggesting fix for file: {e}")
+                except Exception as e: # Catch other unexpected errors during client retrieval
+                    print(f"Unexpected error getting LLM client: {e}. AI features may be unavailable.")
+                    continue
+
+                ai_sub_command = args[0].lower()
+                if ai_sub_command == "gencode":
+                    if len(args) > 1:
+                        prompt_string = strip_quotes(" ".join(args[1:]))
+                        try:
+                            print(f"Generating code using '{llm_manager.active_provider_id}' for prompt: \"{prompt_string}\"...")
+                            generated_code = current_llm_client.generate_code(prompt_string)
+                            if generated_code:
+                                print("\n--- Generated Code ---")
+                                print(generated_code)
+                                print("--- End of Generated Code ---")
+                            else:
+                                print("No code generated or the response was empty.")
+                        except LLMConnectorError as e: # Catch specific connector errors
+                            print(f"Code Generation Error ({llm_manager.active_provider_id}): {e}")
+                        except Exception as e:
+                            print(f"An unexpected error occurred during code generation ({llm_manager.active_provider_id}): {e}")
+                    else:
+                        print("Usage: ai gencode \"<prompt_text>\"")
+
+                elif ai_sub_command == "explain":
+                    if len(args) > 1:
+                        code_snippet = strip_quotes(" ".join(args[1:]))
+                        try:
+                            print(f"Explaining code snippet using '{llm_manager.active_provider_id}': \"{code_snippet[:50]}...\"")
+                            explanation = current_llm_client.explain_code(code_snippet)
+                            if explanation:
+                                print("\n--- Code Explanation ---")
+                                print(explanation)
+                                print("--- End of Explanation ---")
+                            else:
+                                print("No explanation generated or the response was empty.")
+                        except LLMConnectorError as e:
+                            print(f"Explanation Error ({llm_manager.active_provider_id}): {e}")
+                        except Exception as e:
+                            print(f"An unexpected error occurred during code explanation ({llm_manager.active_provider_id}): {e}")
+                    else:
+                        print("Usage: ai explain \"<code_snippet>\"")
+
+                elif ai_sub_command == "explain_file":
+                    if len(args) == 2:
+                        file_path = args[1]
+                        try:
+                            print(f"Explaining file using '{llm_manager.active_provider_id}': \"{file_path}\"...")
+                            code_content = local_files.read_file(file_path)
+                            explanation = current_llm_client.explain_code(code_content)
+                            if explanation:
+                                print("\n--- Code Explanation ---")
+                                print(explanation)
+                                print("--- End of Explanation ---")
+                            else:
+                                print("No explanation generated or the response was empty.")
+                        except FileNotFoundError:
+                            print(f"Error: File not found: {file_path}")
+                        except LLMConnectorError as e:
+                            print(f"Error explaining code from file ({llm_manager.active_provider_id}): {e}")
+                        except Exception as e:
+                            print(f"An unexpected error occurred during file explanation ({llm_manager.active_provider_id}): {e}")
+                    else:
+                        print("Usage: ai explain_file <filepath>")
+
+                elif ai_sub_command == "suggest_fix":
+                    full_parts = parse_quoted_args(raw_input) # ai suggest_fix "<code>" "<issue>"
+                    if len(full_parts) >= 4:
+                        code_snippet = full_parts[2]
+                        issue_description = full_parts[3]
+                        try:
+                            print(f"Suggesting fix using '{llm_manager.active_provider_id}' for code: \"{code_snippet[:50]}...\" issue: \"{issue_description[:50]}...\"")
+                            suggestion = current_llm_client.suggest_code_modification(code_snippet, issue_description)
+                            if suggestion:
+                                print("\n--- Suggested Fix ---")
+                                print(suggestion)
+                                print("--- End of Suggestion ---")
+                            else:
+                                print("No fix suggested or the response was empty.")
+                        except LLMConnectorError as e:
+                            print(f"Modification Error ({llm_manager.active_provider_id}): {e}")
+                        except Exception as e:
+                            print(f"An unexpected error occurred while suggesting fix ({llm_manager.active_provider_id}): {e}")
+                    else:
+                        print("Usage: ai suggest_fix \"<code_snippet>\" \"<issue_description>\"")
+
+                elif ai_sub_command == "suggest_fix_file":
+                    if len(args) >= 3:
+                        file_path = args[1]
+                        issue_description = strip_quotes(" ".join(args[2:]))
+                        try:
+                            print(f"Suggesting fix for file using '{llm_manager.active_provider_id}': \"{file_path}\" issue: \"{issue_description[:50]}...\"")
+                            code_content = local_files.read_file(file_path)
+                            suggestion = current_llm_client.suggest_code_modification(code_content, issue_description)
+                            if suggestion:
+                                print("\n--- Suggested Fix ---")
+                                print(suggestion)
+                                print("--- End of Suggestion ---")
+                            else:
+                                print("No fix suggested or the response was empty.")
+                        except FileNotFoundError:
+                            print(f"Error: File not found: {file_path}")
+                        except LLMConnectorError as e:
+                            print(f"Modification Error ({llm_manager.active_provider_id}): {e}")
+                        except Exception as e:
+                            print(f"An unexpected error occurred while suggesting fix for file ({llm_manager.active_provider_id}): {e}")
+                    else:
+                        print("Usage: ai suggest_fix_file <filepath> \"<issue_description>\"")
                 else:
-                    print("Usage: ai suggest_fix_file <filepath> \"<issue_description>\"")
-            else:
-                print(f"Unknown command: '{command}'. Type 'help' for available commands.")
+                    print(f"Unknown AI command: 'ai {ai_sub_command}'. Type 'help' for available commands.")
+            else: # Handles cases where 'ai' is typed alone or with unknown subcommands.
+                if command == "ai":
+                     print("AI command requires a subcommand (gencode, explain, etc.). Type 'help' for details.")
+                else:
+                    print(f"Unknown command: '{command}'. Type 'help' for available commands.")
 
         except EOFError: # Handle Ctrl+D
             print("\nExiting JaRules CLI. Goodbye!")
