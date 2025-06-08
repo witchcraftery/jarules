@@ -31,66 +31,35 @@ We've successfully completed a major milestone by achieving **100% test coverage
 
 ---
 
-## 🚀 Current Development Priority: Multi-LLM Provider Expansion & Electron Interface Build
+## ✅ Recently Completed: Multi-LLM Expansion & CLI Switching (June 2025)
 
-**Status**: Ready to Begin - Foundation Complete
+This phase focused on extending the agent's capabilities to support a variety of LLM providers and allowing users to manage their active model choice via the CLI.
 
-With our LLM architecture fully implemented and tested, we're ready to expand beyond Gemini to support multiple AI providers.
+-   **Ollama Integration**: Enables connection to local LLMs managed by Ollama, allowing for offline and customized model usage.
+-   **OpenRouter Connector**: Provides access to a wide variety of models (including GPT, Claude, Llama, etc.) via the OpenRouter API, simplifying the use of diverse cloud-based models.
+-   **Anthropic Claude Integration**: Supports Claude models (e.g., Haiku, Sonnet, Opus) via the official Anthropic SDK, enabling access to their advanced reasoning and generation capabilities.
+-   **Runtime Model Switching & Persistence**: Implemented CLI commands (`set-model <id>`, `get-model`, `clear-model`) allowing users to dynamically switch the active LLM provider. User selections are persisted in `~/.jarules/user_state.json`.
 
-### Next Priority Tasks
+These additions significantly enhance the flexibility and power of the JaRules agent.
 
-1. **Ollama Integration** 🎯
-   - **Objective**: Add support for local models (CodeLlama, Llama 3, Mistral)
-   - **Implementation**: Create `jarules_agent/connectors/ollama_connector.py`
-   - **Configuration**: Extend `config/llm_config.yaml` with Ollama settings. Example:
-     ```yaml
-     ollama:
-       base_url: "http://localhost:11434"  # Default Ollama API endpoint
-       default_model: "llama3"
-       # Add other necessary parameters like request_timeout, etc.
-     ```
-   - **Testing**: Comprehensive test suite following Gemini API test patterns.
-     - **Note**: Testing for Ollama should include mocking the Ollama API endpoint (e.g., `base_url`). Consider strategies for testing local model discovery if the connector dynamically lists available models.
+---
 
-2. **OpenRouter Connector** 🎯
-   - **Objective**: Enable access to diverse cloud models
-   - **Implementation**: Create `jarules_agent/connectors/openrouter_connector.py`
-   - **Features**: Support for multiple model families through single API
-   - **Configuration**: Flexible model selection and parameter management in `config/llm_config.yaml`. Example:
-     ```yaml
-     openrouter:
-       api_key: "YOUR_OPENROUTER_API_KEY" # Store securely, ideally via env var
-       default_model: "openai/gpt-4o"
-       # Allow specifying routes or transformations if needed
-       # model_aliases:
-       #   cheapest_fast: "mistralai/mistral-7b-instruct"
-       #   most_capable: "anthropic/claude-3-opus"
-       # Parameters can be overridden per call or configured here
-       timeout: 60
-     ```
-   - **Testing**: Mock the OpenRouter API endpoint for testing. Ensure tests cover routing to different underlying models if the connector supports such logic.
+## 🚀 Current Development Priority: Electron Interface Build & Advanced Features
 
-3. **Anthropic Claude Integration** 🎯
-   - **Objective**: Add Claude API support for advanced reasoning
-   - **Implementation**: Create `jarules_agent/connectors/claude_connector.py`
-   - **Features**: Claude-specific features like constitutional AI. These could be exposed as optional parameters in the `llm_config.yaml` for the Claude connector, e.g., `anthropic_version` header, or specific prompt preambles for constitutional AI.
-     ```yaml
-     anthropic:
-       api_key: "YOUR_ANTHROPIC_API_KEY" # Store securely
-       default_model: "claude-3-opus-20240229"
-       # Example for Claude-specific features:
-       # max_tokens_to_sample: 2000
-       # temperature: 0.7
-       # custom_preamble: "Follow these principles..." (for Constitutional AI)
-     ```
-   - **Testing**: Full test coverage matching our Gemini standards. Mock the Anthropic API, paying attention to its specific request/response structure and error codes.
+**Status**: Core Multi-LLM capabilities complete. Ready for next phase.
 
-4. **Runtime Model Switching** 🎯
-   - **Objective**: Allow dynamic provider selection in CLI
-   - **Implementation**: Enhance CLI with model switching commands. For example, a command like `jarules set-model <provider_alias>` (e.g., `jarules set-model ollama_llama3` or `jarules set-model gemini_default`).
-   - **UX**: Seamless switching between local and cloud providers.
-     - **Note**: Consider challenges such as maintaining conversation context if applicable, and gracefully handling features that are only available from specific providers.
-   - **Configuration**: User preference persistence, potentially by storing the currently selected model alias in a local user-specific configuration file (e.g., `~/.jarules/user_config.yaml`).
+With the foundational multi-LLM architecture and CLI model management in place, the next priorities involve:
+
+1.  **Electron Interface Build**:
+    *   Develop a user-friendly desktop application using Electron for interacting with the agent.
+    *   Integrate existing CLI functionalities into the GUI.
+    *   Design UI/UX for model selection, configuration, and interaction.
+2.  **Advanced Agent Features**:
+    *   Explore and implement features like conversational memory, enhanced context management, and tool usage.
+    *   Investigate more complex workflow automation.
+3.  **Documentation and Polish**:
+    *   Comprehensive user and developer documentation for the new features and connectors.
+    *   Refine error handling and user feedback across all interfaces.
 
 ### Development Guidelines for New Connectors
 
@@ -112,6 +81,7 @@ With our LLM architecture fully implemented and tested, we're ready to expand be
 - Environment variable patching **before** client initialization (especially for API keys and endpoint configurations).
 - Mock setup for API interactions, specific to each provider's API.
 - Error handling and edge case coverage.
+- **Note**: The recently added Ollama, OpenRouter, and Claude connectors serve as good examples for these guidelines.
 
 **Configuration Integration**:
 - Add provider configuration to `config/llm_config.yaml`. See example structure below.
@@ -149,16 +119,6 @@ anthropic:
 # Default provider to use if not specified by the user
 default_provider: "gemini"
 ```
-
-### Estimated Timeline
-
-- **Ollama Connector**: 1 week
-- **OpenRouter Connector**: 1 week  
-- **Claude Integration**: 1 week
-- **Runtime Switching**: 3-4 days
-- **Documentation & Polish**: 2-3 days
-
-**Total**: ~1 month for complete multi-LLM ecosystem
 
 ---
 
