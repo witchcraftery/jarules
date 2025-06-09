@@ -39,21 +39,16 @@ def get_models():
 
     output = {}
     try:
-        # It's important that LLMManager can find its connectors.
-        # This might require PYTHONPATH to be set correctly when PythonShell runs this script,
-        # or for the connectors to be discoverable from LLMManager's location.
         manager = LLMManager(config_path=config_path)
-        available_configs = manager.get_available_configs() # This returns a dict
-
-        # Convert dict of configs to a list of dicts, which is often easier for UIs
+        available_configs = manager.get_available_configs()
         models_list = [config for config_id, config in available_configs.items()]
+        # No "error": true field means success
         output = {"models": models_list}
 
     except LLMConfigError as e:
-        output = {"error": f"LLM Configuration Error: {str(e)}"}
+        output = {"error": True, "message": f"LLM Configuration Error loading available models.", "details": str(e)}
     except Exception as e:
-        # Catch-all for other unexpected errors during LLMManager init or config loading
-        output = {"error": f"An unexpected error occurred: {str(e)}"}
+        output = {"error": True, "message": "An unexpected error occurred while loading available models.", "details": str(e)}
 
     print(json.dumps(output))
 

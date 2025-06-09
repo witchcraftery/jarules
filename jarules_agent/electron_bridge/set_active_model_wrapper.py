@@ -25,14 +25,14 @@ def set_active_model(provider_id: str):
 
     try:
         manager = LLMManager(config_path=config_path)
-        manager.set_active_provider(provider_id) # This validates and saves
+        manager.set_active_provider(provider_id)
         output = {"success": True, "message": f"Active model successfully set to '{provider_id}'."}
-    except ValueError as e: # Raised by set_active_provider for invalid ID
-        output = {"success": False, "error": str(e)}
-    except LLMConfigError as e: # If LLMManager itself fails to initialize
-        output = {"success": False, "error": f"LLM Configuration Error: {str(e)}"}
+    except ValueError as e:
+        output = {"error": True, "message": "Invalid provider ID provided.", "details": str(e)}
+    except LLMConfigError as e:
+        output = {"error": True, "message": "LLM Configuration Error during set active model.", "details": str(e)}
     except Exception as e:
-        output = {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+        output = {"error": True, "message": "An unexpected error occurred while setting active model.", "details": str(e)}
 
     print(json.dumps(output))
 
@@ -43,7 +43,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if not args.provider_id:
-        # Should be caught by argparse 'required' if not for positional, but good practice
-        print(json.dumps({"success": False, "error": "No provider_id provided."}))
+        print(json.dumps({"error": True, "message": "No provider_id provided.", "details": "Argument 'provider_id' is required."}))
     else:
         set_active_model(args.provider_id)

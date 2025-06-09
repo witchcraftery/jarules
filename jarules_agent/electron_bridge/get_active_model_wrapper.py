@@ -32,13 +32,14 @@ def get_active_model():
     if error_message:
         # While the primary goal is to return the ID, including an error if one occurred
         # during read might be useful for debugging from Electron side, but not strictly part of the ID.
-        # For now, let's just rely on active_id being None if errors occur.
-        # If Electron needs to know about the error, we could add an 'error' field.
-        pass
+
+    output = {}
+    if error_occurred:
+        output = {"error": True, "message": error_message, "details": f"File: {CHAT_HISTORY_PATH}", "active_provider_id": None}
+    else:
+        output = {"active_provider_id": active_id} # No "error":true field means success
 
     print(json.dumps(output))
 
 if __name__ == '__main__':
-    # Ensure the directory exists for other operations, though not strictly needed for read-only here.
-    # (Path.home() / ".jarules").mkdir(parents=True, exist_ok=True)
     get_active_model()
