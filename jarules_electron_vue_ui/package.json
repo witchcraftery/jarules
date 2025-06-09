@@ -8,8 +8,33 @@
     "dev:electron": "electron .",
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "build:vite": "vite build",
+    "build": "npm run build:vite && electron-builder",
     "start:prod": "npm run build:vite && electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.jarules.desktop",
+    "productName": "JaRules Desktop",
+    "directories": {
+      "output": "dist_electron",
+      "buildResources": "build_resources"
+    },
+    "files": [
+      "dist/**",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "extends": null
   },
   "keywords": [],
   "author": "",
@@ -21,6 +46,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "python-shell": "^5.0.0",
     "vue": "^3.5.16"
   }
 }

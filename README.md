@@ -4,7 +4,9 @@
 
 ## Overview
 
-JaRules is an asynchronous development assistant designed to streamline your software engineering tasks. It connects to your local file system, GitHub repositories, and various AI APIs (starting with Gemini). Through an intuitive interface (initially CLI, evolving to a chat-based UI), JaRules aims to help you write code, tackle bugs, manage features, and more!
+JaRules is an asynchronous development assistant designed to streamline your software engineering tasks. It connects to your local file system, GitHub repositories, and various AI APIs. Through an intuitive interface (initially CLI, evolving to a chat-based UI), JaRules aims to help you write code, tackle bugs, manage features, and more!
+
+JaRules now supports multiple LLM backends (including Ollama for local models, OpenRouter for diverse cloud models, and Anthropic Claude alongside Google Gemini) and allows you to switch between them seamlessly at runtime via the CLI.
 
 ## Current Status
 
@@ -51,6 +53,15 @@ With our solid, tested foundation in place, we're ready to expand:
 - **Anthropic Claude**: Claude API integration
 - **Runtime Model Switching**: Dynamic provider selection
 
+### ✅ **Multi-LLM Expansion & CLI Switching Completed (June 2025)**
+
+Building on the robust LLM configuration system, JaRules has been expanded to include support for several new LLM providers and runtime model management:
+
+-   **Ollama Integration**: Enables connection to local LLMs managed by Ollama.
+-   **OpenRouter Connector**: Provides access to a wide variety of models via the OpenRouter API.
+-   **Anthropic Claude Integration**: Supports Claude models (e.g., Haiku, Sonnet, Opus) via the official Anthropic SDK.
+-   **Runtime Model Switching & Persistence**: Implemented CLI commands (`set-model <id>`, `get-model`, `clear-model`) allowing users to dynamically switch the active LLM provider. User selections are persisted in `~/.jarules/user_state.json`.
+
 ## Progress So Far (What's Built! ✨)
 
 ### **Core Architecture**
@@ -87,6 +98,9 @@ With our solid, tested foundation in place, we're ready to expand:
   - `explain_code(code_snippet, system_instruction)`: Explains code snippets
   - `suggest_code_modification(code_snippet, issue_description, system_instruction)`: Suggests code improvements
 - **Configuration Support**: API key management, default system prompts, generation parameters
+- **Ollama Integration (`jarules_agent/connectors/ollama_connector.py`)**: Enables connection to local LLMs managed by Ollama.
+- **OpenRouter Integration (`jarules_agent/connectors/openrouter_connector.py`)**: Provides access to a wide variety of models via the OpenRouter API.
+- **Anthropic Claude Integration (`jarules_agent/connectors/claude_connector.py`)**: Supports Claude models (e.g., Haiku, Sonnet, Opus) via the official Anthropic SDK.
 
 ### **Command-Line Interface (`jarules_agent/ui/cli.py`)**
 
@@ -96,6 +110,10 @@ With our solid, tested foundation in place, we're ready to expand:
   - **File Operations**: `ls`, `read`, `write`
   - **GitHub Operations**: `gh_ls`, `gh_read`
   - **AI Operations**: `ai gencode`, `ai explain`, `ai explain_file`, `ai suggest_fix`, `ai suggest_fix_file`
+  - **Model Management**:
+    - `set-model <provider_id>`: Sets the active LLM provider.
+    - `get-model`: Displays the current active LLM provider and its configuration.
+    - `clear-model`: Clears any persisted active model selection and reverts to the default.
   - **Utility**: `help`, `exit`
 
 ### **Testing Suite**
@@ -167,29 +185,28 @@ python -m pytest jarules_agent/tests/test_llm_manager.py -v
 
 ## Development Status & Next Steps
 
-### **Immediate Priority (Ready to Start)**
+### **Current Development Priority (Post Multi-LLM Expansion)**
 
-1. **Multi-LLM Provider Expansion** - Begin Ollama integration for local models
-2. **Enhanced CLI Features** - Runtime model switching and improved UX  
-3. **Configuration UI** - Web-based LLM provider management
+With the core multi-LLM capabilities and CLI-based model management now complete, the next major development thrusts are:
 
-### **Near-term Development (Next 1-2 weeks)**
-
-1. **Ollama Integration**: Add support for local models (CodeLlama, Llama 3, Mistral)
-2. **OpenRouter Connector**: Enable access to diverse cloud models
-3. **Runtime Model Switching**: Allow users to switch between LLM providers in CLI
-
-### **Medium-term Goals (Next month)**
-
-1. **Anthropic Claude Support**: Add Claude API integration
-2. **Enhanced CLI**: Improved user experience and command structure
-3. **Configuration UI**: Web-based configuration management
+1.  **Electron Interface Build**:
+    *   Develop a user-friendly desktop application using Electron for interacting with the agent.
+    *   Integrate existing CLI functionalities into the GUI.
+    *   Design UI/UX for model selection, configuration, and interaction.
+2.  **Advanced Agent Features**:
+    *   Explore and implement features like conversational memory, enhanced context management, and tool usage (function calling).
+    *   Investigate more complex workflow automation and planning capabilities.
+3.  **Documentation and Polish**:
+    *   Comprehensive user and developer documentation for all new features and connectors.
+    *   Refine error handling and user feedback across all interfaces.
+    *   Expand test coverage for integration scenarios.
 
 ### **Long-term Vision**
 
-1. **Chat User Interface**: Electron-based desktop application
-2. **Advanced Agent Capabilities**: Multi-step task execution
-3. **Plugin System**: Extensible connector architecture
+1. **Chat User Interface**: Fully featured Electron-based desktop application.
+2. **Advanced Agent Capabilities**: Robust multi-step task execution, planning, and self-correction.
+3. **Plugin System**: Highly extensible connector and tool architecture.
+4. **Web UI / Backend Service**: Potential for a web-accessible version.
 
 ## Contributing
 
@@ -221,6 +238,9 @@ jarules_agent/
 │   ├── local_files.py  # File system operations
 │   ├── github_connector.py  # GitHub API integration
 │   ├── gemini_api.py   # Google Gemini integration
+│   ├── ollama_connector.py # Ollama local LLM integration
+│   ├── openrouter_connector.py # OpenRouter API integration
+│   ├── claude_connector.py # Anthropic Claude API integration
 │   └── base_llm_connector.py  # LLM connector interface
 ├── ui/                 # User interfaces
 │   └── cli.py          # Command-line interface
@@ -237,6 +257,6 @@ jarules_agent/
 
 ---
 
-**Last Updated**: May 31, 2025  
-**Version**: 0.2.0 (LLM Architecture Complete + Full Test Coverage)  
-**Status**: 🎉 All tests passing! Ready for multi-LLM expansion
+**Last Updated**: June 1, 2025
+**Version**: 0.3.0 (Multi-LLM Connectors & CLI Switching Implemented)
+**Status**: 🎉 Multi-LLM capabilities and CLI model management complete! Ready for UI development and advanced features.
