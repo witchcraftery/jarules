@@ -62,9 +62,10 @@ These additions significantly enhance the flexibility and power of the JaRules a
 ### Electron UI - Phase 2: Advanced Features & Foolproofing
 This phase aims to integrate more sophisticated interactions and robust operational checks into the Electron UI.
 
-*   **Context Management System (Basic)**:
-    *   Implement logic to send a configurable amount of recent chat history along with new prompts to provide context to the LLM.
-    *   Allow users to clear/reset context if needed (could be tied to clearing chat history or a separate action).
+*   ✅ **Context Management System (Basic)**: (Completed July 2025)
+    *   Implemented logic to automatically send the last N messages (default 10, configurable via `user_state.json` by setting `context_message_count`) from `~/.jarules/chat_history.json` as context to the LLM.
+    *   The number of messages is determined by `context_message_count` in `user_state.json`, falling back to a default of 10 if the setting is not present or invalid.
+    *   Existing "Clear Chat History" functionality in the UI effectively clears/resets this context as it empties `chat_history.json`.
 *   **In-App Configuration UI (Read-Only First)**:
     *   Create a UI section to display the contents of `llm_config.yaml` in a user-friendly, read-only format.
     *   This helps users understand available models and their configurations without directly editing YAML.
