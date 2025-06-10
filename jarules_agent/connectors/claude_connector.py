@@ -1,16 +1,17 @@
 import logging
 import os
 import anthropic # Official Anthropic SDK
+from typing import Optional, List, Dict, Any # Added Optional, List, Dict, Any
 
-from jarules_agent.connectors.base_llm_connector import BaseLLMConnector
+from jarules_agent.connectors.base_llm_connector import BaseLLMConnector, LLMConnectorError
 
 logger = logging.getLogger(__name__)
 
 # Define a custom exception for Claude API errors
-class ClaudeApiError(Exception):
+class ClaudeApiError(LLMConnectorError): # Inherit from LLMConnectorError
     """Custom exception for Anthropic Claude API errors."""
-    def __init__(self, message, status_code=None, error_type=None):
-        super().__init__(message)
+    def __init__(self, message, status_code=None, error_type=None, underlying_exception: Optional[Exception] = None):
+        super().__init__(message, underlying_exception=underlying_exception)
         self.status_code = status_code
         self.error_type = error_type # e.g., 'authentication_error', 'rate_limit_error'
 
@@ -22,37 +23,39 @@ class ClaudeConnector(BaseLLMConnector):
     DEFAULT_MODEL_NAME = "claude-3-opus-20240229"
     DEFAULT_MAX_TOKENS = 2048 # Default max tokens for Claude, can be overridden by config
 
-    def __init__(self, config: dict):
+    def __init__(self, model_name: Optional[str] = None, **kwargs: Any): # Updated signature
         """
         Initializes the ClaudeConnector.
 
         Args:
-            config: A dictionary containing configuration parameters.
-                    Expected keys:
-                    - 'api_key_env_var' (str): Name of the environment variable holding the API key.
-                    - 'model_name' (str, optional): Default model to use (e.g., "claude-3-opus-20240229").
-                    - 'default_system_prompt' (str, optional): Default system prompt text.
-                    - 'max_tokens' (int, optional): Default maximum number of tokens to generate.
-                    - 'request_timeout' (int, optional): Timeout for API requests in seconds.
-                    - 'anthropic_version_header' (str, optional): Value for the 'anthropic-version' header.
+            model_name: Optional. The default model to use (e.g., "claude-3-opus-20240229").
+            **kwargs: Configuration parameters.
+                      Expected keys in kwargs:
+                      - 'api_key_env_var' (str): Name of the environment variable holding the API key.
+                                                 Defaults to "ANTHROPIC_API_KEY".
+                      - 'default_system_prompt' (str, optional): Default system prompt text.
+                      - 'max_tokens' (int, optional): Default maximum number of tokens to generate.
+                                                      Defaults to 2048.
+                      - 'request_timeout' (int, optional): Timeout for API requests in seconds.
+                                                           Defaults to 60.
+                      - 'anthropic_version_header' (str, optional): Value for the 'anthropic-version' header.
+                      - 'generation_params' (dict, optional): Additional generation parameters like temperature.
         """
-        super().__init__(config)
+        effective_model_name = model_name or kwargs.get("model_name") or self.DEFAULT_MODEL_NAME
+        super().__init__(model_name=effective_model_name, **kwargs) # Pass to BaseLLMConnector
 
-        api_key_env_var = config.get("api_key_env_var", "ANTHROPIC_API_KEY")
+        api_key_env_var = self._config.get("api_key_env_var", "ANTHROPIC_API_KEY")
         self.api_key = os.environ.get(api_key_env_var)
         if not self.api_key:
-            raise ValueError(f"API key not found. Set the {api_key_env_var} environment variable.")
+            raise ClaudeApiError(f"API key not found. Set the {api_key_env_var} environment variable.")
 
-        self.model_name = config.get("model_name", self.DEFAULT_MODEL_NAME)
-        self.default_system_prompt = config.get("default_system_prompt")
-        self.max_tokens = config.get("max_tokens", self.DEFAULT_MAX_TOKENS)
-        request_timeout = config.get("request_timeout", 60) # Default to 60 seconds
+        self.default_system_prompt = self._config.get("default_system_prompt")
+        self.max_tokens = self._config.get("max_tokens", self.DEFAULT_MAX_TOKENS)
+        self.generation_params = self._config.get("generation_params", {}) # Store other generation params
+        request_timeout = self._config.get("request_timeout", 60)
 
-        # The Anthropic SDK uses ANTHROPIC_API_KEY env var by default if api_key is not passed to constructor.
-        # Explicitly passing it ensures we use the one specified by api_key_env_var.
-        # The SDK also allows setting other headers like 'anthropic-version'.
         custom_headers = {}
-        anthropic_version = config.get("anthropic_version_header")
+        anthropic_version = self._config.get("anthropic_version_header")
         if anthropic_version:
             custom_headers["anthropic-version"] = anthropic_version
 
@@ -62,9 +65,9 @@ class ClaudeConnector(BaseLLMConnector):
                 timeout=request_timeout,
                 custom_headers=custom_headers if custom_headers else None
             )
-        except Exception as e: # Catch potential errors during client initialization
+        except Exception as e:
             logger.error(f"Failed to initialize Anthropic client: {e}")
-            raise ClaudeApiError(f"Anthropic client initialization failed: {e}") from e
+            raise ClaudeApiError(f"Anthropic client initialization failed: {e}", underlying_exception=e) from e
 
         logger.info(
             f"ClaudeConnector initialized with model: {self.model_name}, "
@@ -72,91 +75,98 @@ class ClaudeConnector(BaseLLMConnector):
             f"anthropic_version: {anthropic_version or 'SDK Default'}"
         )
         if self.default_system_prompt:
-            logger.info(f"Default system prompt: {self.default_system_prompt[:100]}...")
+            logger.info(f"Default system prompt: {(self.default_system_prompt or '')[:100]}...")
+        if self.generation_params:
+            logger.info(f"Default generation parameters: {self.generation_params}")
 
 
-import anthropic.APIStatusError # For more specific error handling
+# For more specific error handling, anthropic.APIStatusError is useful.
+# We'll also need `anthropic.APIConnectionError`, `anthropic.RateLimitError`, etc.
 
     async def _create_message(
         self,
-        messages: list,
-        system_prompt_override: str = None,
-        generation_params_override: dict = None
+        messages: List[Dict[str, Any]], # Content can be List[Dict] for complex content
+        system_prompt_override: Optional[str] = None,
+        generation_params_override: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Private helper method to interact with self.client.messages.create().
         Constructs the request and handles API responses and errors.
-
-        Args:
-            messages: A list of message dictionaries (e.g., [{"role": "user", "content": ...}]).
-            system_prompt_override: An optional system prompt to use instead of the default.
-            generation_params_override: Optional dictionary to override default generation parameters.
-
-        Returns:
-            The text content from Claude's response.
-
-        Raises:
-            ClaudeApiError: If any API error occurs.
         """
         current_system_prompt = system_prompt_override if system_prompt_override is not None else self.default_system_prompt
 
-        # Merge generation parameters
-        final_generation_params = {**self.generation_params, **(generation_params_override or {})}
+        # Merge generation parameters: default_class_params < method_override_params
+        final_generation_params = self.generation_params.copy()
+        if generation_params_override:
+            final_generation_params.update(generation_params_override)
+
+
+        # Ensure max_tokens is part of the final_generation_params if not already, using self.max_tokens as default for it
+        if 'max_tokens' not in final_generation_params:
+            final_generation_params['max_tokens'] = self.max_tokens
 
         try:
             logger.debug(
-                f"Sending request to Claude. Model: {self.model_name}, System: {current_system_prompt[:100] if current_system_prompt else 'None'}, "
-                f"Messages: {str(messages)[:200]}, Max Tokens: {self.max_tokens}, Params: {final_generation_params}"
+                f"Sending request to Claude. Model: {self.model_name}, System: {(current_system_prompt or '')[:100]}, "
+                f"Messages: {str(messages)[:200]}, Params: {final_generation_params}"
             )
-            response = await self.client.messages.create(
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                system=current_system_prompt, # Can be None, SDK handles it
-                messages=messages,
-                **final_generation_params # Spread other params like temperature, top_p, etc.
-            )
+
+            request_params = {
+                "model": self.model_name,
+                "messages": messages,
+                **final_generation_params # Spread other params like temperature, top_p, max_tokens etc.
+            }
+            if current_system_prompt: # Only add system if it's not None or empty
+                request_params["system"] = current_system_prompt
+
+            response = await self.client.messages.create(**request_params)
 
             if response.content and isinstance(response.content, list) and len(response.content) > 0:
                 # Assuming the first content block is the primary text response
-                if hasattr(response.content[0], 'text'):
-                    text_content = response.content[0].text
+                # Claude can return multiple content blocks, e.g., text and tool_use
+                # We are interested in the text block.
+                text_content = ""
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        text_content += block.text # Concatenate text from all text blocks if multiple (though rare for typical chat)
+
+                if text_content:
                     logger.info(f"Successfully received response from Claude. Content length: {len(text_content)}")
                     return text_content.strip()
-                else:
-                    logger.error(f"Claude response content block does not have text attribute: {response.content[0]}")
-                    raise ClaudeApiError("Invalid response structure: content block missing text.", status_code=None) # Or use a specific status
-            else:
-                logger.warning(f"Claude response was empty or invalid: {response}")
-                # It's possible Claude returns an empty but valid response (e.g. if input is unsafe)
-                # Depending on stop_reason, this might be normal. For now, return empty string.
-                # Example: response.stop_reason == 'stop_sequence' with empty content.
-                if response.stop_reason:
+                else: # No text blocks found, but other content might exist (e.g. tool use)
+                    logger.warning(f"Claude response did not contain any text content blocks. Stop reason: {response.stop_reason}. Full response: {response}")
+                    # If stop_reason indicates completion but no text, return empty.
+                    # If it's due to max_tokens or stop_sequence, empty might be valid.
+                    return "" # Or raise error if text is strictly expected
+            else: # No content blocks at all
+                logger.warning(f"Claude response was empty or invalid: {response}. Stop Reason: {response.stop_reason}")
+                if response.stop_reason: # e.g. 'max_tokens', 'stop_sequence'
                      logger.info(f"Claude response had stop_reason: {response.stop_reason} with empty content.")
-                     return ""
-                raise ClaudeApiError("Empty or invalid response content from Claude.", status_code=None)
+                     return "" # Valid empty response
+                raise ClaudeApiError("Empty or invalid response content from Claude.", status_code=None, underlying_exception=ValueError(str(response)))
 
 
         except anthropic.APIConnectionError as e:
             logger.error(f"Claude API connection error: {e}")
-            raise ClaudeApiError(f"Connection to Claude API failed: {e}", status_code=e.status_code, error_type="connection_error") from e
+            raise ClaudeApiError(f"Connection to Claude API failed: {e}", status_code=getattr(e, 'status_code', None), error_type="connection_error", underlying_exception=e) from e
         except anthropic.RateLimitError as e:
             logger.error(f"Claude API rate limit exceeded: {e}")
-            raise ClaudeApiError(f"Claude API rate limit exceeded: {e}", status_code=e.status_code, error_type="rate_limit_error") from e
+            raise ClaudeApiError(f"Claude API rate limit exceeded: {e}", status_code=getattr(e, 'status_code', None), error_type="rate_limit_error", underlying_exception=e) from e
         except anthropic.AuthenticationError as e:
             logger.error(f"Claude API authentication error: {e}")
-            raise ClaudeApiError(f"Claude API authentication failed (check API key): {e}", status_code=e.status_code, error_type="authentication_error") from e
+            raise ClaudeApiError(f"Claude API authentication failed (check API key): {e}", status_code=getattr(e, 'status_code', None), error_type="authentication_error", underlying_exception=e) from e
         except anthropic.PermissionDeniedError as e:
             logger.error(f"Claude API permission denied: {e}")
-            raise ClaudeApiError(f"Claude API permission denied: {e}", status_code=e.status_code, error_type="permission_denied_error") from e
+            raise ClaudeApiError(f"Claude API permission denied: {e}", status_code=getattr(e, 'status_code', None), error_type="permission_denied_error", underlying_exception=e) from e
         except anthropic.NotFoundError as e:
             logger.error(f"Claude API resource not found (e.g. model name issue): {e}")
-            raise ClaudeApiError(f"Claude API resource not found: {e}", status_code=e.status_code, error_type="not_found_error") from e
+            raise ClaudeApiError(f"Claude API resource not found: {e}", status_code=getattr(e, 'status_code', None), error_type="not_found_error", underlying_exception=e) from e
         except anthropic.APIStatusError as e: # General status error from Anthropic SDK
             logger.error(f"Claude API status error: {e.status_code} - {e.message}")
-            raise ClaudeApiError(f"Claude API error: {e.status_code} - {e.message}", status_code=e.status_code, error_type=e.type if hasattr(e, 'type') else "api_error") from e
+            raise ClaudeApiError(f"Claude API error: {e.status_code} - {e.message}", status_code=e.status_code, error_type=getattr(e, 'type', "api_error"), underlying_exception=e) from e
         except Exception as e: # Catch any other unexpected errors
             logger.error(f"An unexpected error occurred with Claude API: {e}", exc_info=True)
-            raise ClaudeApiError(f"An unexpected error occurred: {e}", status_code=None, error_type="unexpected_error") from e
+            raise ClaudeApiError(f"An unexpected error occurred: {e}", error_type="unexpected_error", underlying_exception=e) from e
 
 
     async def check_availability(self) -> bool:
