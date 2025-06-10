@@ -186,14 +186,15 @@ class GeminiClient(BaseLLMConnector):
         "If you need to include comments, ensure they are within the code block itself (e.g., using # for Python)."
     )
 
-    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Generates code using the Gemini API.
 
         Args:
             user_prompt: The user's direct request for code generation.
-            system_instruction: Optional. A guiding instruction for the model. 
+            system_instruction: Optional. A guiding instruction for the model.
                                 If None, a default instruction promoting direct code output is used.
+            history: Optional. A list of dictionaries representing the conversation history.
 
         Returns:
             The generated code as a string, or None if generation fails or is blocked.
@@ -208,18 +209,101 @@ class GeminiClient(BaseLLMConnector):
             active_system_instruction = self.default_system_prompt
         else:
             active_system_instruction = self.DEFAULT_CODE_SYSTEM_INSTRUCTION
+
+        # Construct content for Gemini API
+        # History is expected to be [{"role": "user", "text": "..."}, {"role": "assistant", "text": "..."}]
+        # Gemini expects [{"role": "user", "parts": ["..."]}, {"role": "model", "parts": ["..."]}]
+        gemini_contents = []
+        if history:
+            for item in history:
+                role = "user" if item.get("role") == "user" else "model"
+                # Gemini uses 'parts' which is a list of strings (or other Part types)
+                # Assuming 'text' key from input history, if not, adapt as needed.
+                content_text = item.get("text") or item.get("content") # Accommodate "content" if used
+                if content_text:
+                     gemini_contents.append({"role": role, "parts": [content_text]})
+                # If history item is malformed (e.g. no text/content), it's skipped.
+
+        # System instruction handling (as per Gemini's recommendation, often part of the first user message or separate system message if API supports)
+        # For generate_content, system instructions are typically prepended or handled by model tuning.
+        # Here, we'll prepend it to the user prompt if it's not already part of the history construction logic.
+        # If a system instruction exists, it should ideally be the first message or part of the model's configuration.
+        # Let's assume the current approach is to prepend system instruction to the user prompt if no history,
+        # or ensure it's the first "system" message if history is present and the API supports system roles distinctly.
+        # For Gemini, system instructions can be part of the `contents` list.
+        # If there's a system instruction and no history, we can make it the first "user" turn with system context.
+        # Or, if the model supports a dedicated system instruction field (some Gemini models via specific tuning/API structures do).
+        # For `genai.GenerativeModel.generate_content(contents=...)`, system instructions are often part of the `contents` list.
+        # Let's try to put the system instruction as the first element if it exists.
         
-        prompt_parts = []
-        if active_system_instruction: # Ensure it's not an empty string if user explicitly passed ""
-            prompt_parts.append(active_system_instruction)
-        prompt_parts.append(user_prompt)
+        final_prompt_parts = []
+        if active_system_instruction: # Ensure it's not an empty string
+            # Gemini doesn't have a dedicated "system" role in the same way as OpenAI for its `contents` argument.
+            # It's common to put system instructions as the first "user" message or as part of the model's configuration.
+            # If history is empty, we prepend system instruction to the user_prompt.
+            # If history is present, the system instruction might need to be the first message in `gemini_contents`
+            # or integrated into the first user message.
+            # For simplicity, if history is NOT provided, we treat system_instruction + user_prompt as the first turn.
+            # If history IS provided, we assume system_instruction was part of its construction or is handled by the first history message.
+            # This logic might need refinement based on how system instructions are best handled with history in Gemini.
+            # A common pattern is: System Prompt, User Prompt, Model Response, User Prompt, Model Response ...
+            # So, if history is empty, system prompt + user prompt becomes the first message.
+            # If history exists, system prompt should have been the *very first* message.
+            # The current history format {"role": "user/assistant", "text": ...} doesn't explicitly include a system message *before* the first user message.
+            # So, we will add the system instruction before the current user_prompt if no history,
+            # and prepend it to gemini_contents if history is present.
+
+            # If history is provided, we should ensure the system message is the first message.
+            # This is a bit tricky if history already has a "system" message or if the system message should always precede history.
+            # For now, let's assume system_instruction applies to the current turn.
+            # If gemini_contents is empty (no history), then the first user message will include system instructions.
+            if not gemini_contents and active_system_instruction:
+                 final_prompt_parts.append({"role": "user", "parts": [active_system_instruction, user_prompt]})
+            else:
+                # If history exists, we prepend the system instruction as a new user message if it's not already there.
+                # This might lead to "user: system_instr", "user: history_user_msg1", "model: history_model_msg1" etc.
+                # which is not ideal.
+                # A better approach for history: the system instruction should be part of the initial context.
+                # Let's refine: system_instruction is for the *current* user_prompt.
+                # The `gemini_contents` will be history. The current turn is `user_prompt` potentially guided by `system_instruction`.
+                # Gemini's `generate_content` takes a list of `Content` objects (dicts).
+                # The prompt to the model is the entire list.
+                # System instructions are often provided in the `system_instruction` parameter of `GenerativeModel`
+                # or as the first element in the `contents` list.
+                # `genai.GenerativeModel(model_name, system_instruction=...)` is one way.
+                # Or `self.model.generate_content(contents=[{'role':'system', 'parts': ["..."]}, user_message_1, model_message_1 ...])`
+                # However, `genai.Content` doesn't officially list 'system' as a role. It's 'user' or 'model'.
+                # So, system instructions are typically prepended to the first user message or set at model init.
+                # Let's assume default_system_prompt or passed system_instruction modifies the *current* user_prompt.
+
+                # Add history to final_prompt_parts
+                final_prompt_parts.extend(gemini_contents)
+                # Add current user prompt, potentially prefixed by system instruction if it wasn't for the whole history
+                current_turn_parts = []
+                if active_system_instruction and not history: # Apply system instruction only if no history, assuming history already accounted for it
+                    current_turn_parts.append(active_system_instruction)
+                current_turn_parts.append(user_prompt)
+                final_prompt_parts.append({"role": "user", "parts": current_turn_parts})
+
+        else: # No system instruction
+            final_prompt_parts.extend(gemini_contents)
+            final_prompt_parts.append({"role": "user", "parts": [user_prompt]})
+
 
         # For now, using instance default generation config.
         # Could extend to allow method-specific overrides via kwargs if needed.
-        current_generation_config = self.default_generation_config 
+        current_generation_config = self.default_generation_config
 
         try:
-            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
+            # Ensure final_prompt_parts is not empty if user_prompt was empty and no history
+            if not final_prompt_parts:
+                if user_prompt: # Should always have user_prompt unless it's an error
+                    final_prompt_parts.append({"role": "user", "parts": [user_prompt]})
+                else:
+                    # This case should ideally be validated before calling _generate_content_raw
+                    raise GeminiCodeGenerationError("User prompt is empty and no history provided.")
+
+            response = self._generate_content_raw(final_prompt_parts, method_generation_config=current_generation_config)
 
             # Check for safety blocks or problematic finish reasons first
             if response.prompt_feedback and response.prompt_feedback.block_reason:
@@ -287,7 +371,7 @@ class GeminiClient(BaseLLMConnector):
         "Describe its purpose, how it works, and any key components or logic."
     )
 
-    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Explains a given code snippet using the Gemini API.
 
@@ -295,6 +379,7 @@ class GeminiClient(BaseLLMConnector):
             code_snippet: The string containing the code to be explained.
             system_instruction: Optional. A guiding instruction for the model.
                                 If None, a default instruction for explanation is used.
+            history: Optional. A list of dictionaries representing the conversation history.
 
         Returns:
             The generated explanation as a string, or None if generation fails or is blocked.
@@ -309,21 +394,35 @@ class GeminiClient(BaseLLMConnector):
             active_system_instruction = self.default_system_prompt
         else:
             active_system_instruction = self.DEFAULT_EXPLAIN_SYSTEM_INSTRUCTION
-        
-        # Constructing prompt parts for explanation
-        # It's often good to clearly delineate the code to be explained.
+
+        gemini_contents = []
+        if history:
+            for item in history:
+                role = "user" if item.get("role") == "user" else "model"
+                content_text = item.get("text") or item.get("content")
+                if content_text:
+                    gemini_contents.append({"role": role, "parts": [content_text]})
+
         user_prompt_for_explanation = f"Please explain the following code:\n\n```\n{code_snippet}\n```"
 
-        prompt_parts = []
-        if active_system_instruction:
-            prompt_parts.append(active_system_instruction)
-        prompt_parts.append(user_prompt_for_explanation)
+        final_prompt_parts = []
+        if not gemini_contents and active_system_instruction:
+            final_prompt_parts.append({"role": "user", "parts": [active_system_instruction, user_prompt_for_explanation]})
+        else:
+            final_prompt_parts.extend(gemini_contents)
+            current_turn_parts = []
+            if active_system_instruction and not history:
+                 current_turn_parts.append(active_system_instruction)
+            current_turn_parts.append(user_prompt_for_explanation)
+            final_prompt_parts.append({"role": "user", "parts": current_turn_parts})
 
-        # For now, using instance default generation config.
-        current_generation_config = self.default_generation_config 
+
+        current_generation_config = self.default_generation_config
 
         try:
-            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
+            if not final_prompt_parts:
+                 raise GeminiExplanationError("User prompt for explanation is empty and no history provided.")
+            response = self._generate_content_raw(final_prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code explanation prompt blocked by Gemini API. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}. Details: {response.prompt_feedback}"
@@ -364,7 +463,7 @@ class GeminiClient(BaseLLMConnector):
         "Do not include any other explanatory text outside the code block unless it's part of the code comments."
     )
 
-    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Suggests modifications to a given code snippet based on an issue description.
 
@@ -373,6 +472,7 @@ class GeminiClient(BaseLLMConnector):
             issue_description: A natural language description of the desired modification or fix.
             system_instruction: Optional. A guiding instruction for the model.
                                 If None, a default instruction for modification is used.
+            history: Optional. A list of dictionaries representing the conversation history.
 
         Returns:
             The suggested modified code as a string, or None if generation fails/is blocked.
@@ -387,6 +487,14 @@ class GeminiClient(BaseLLMConnector):
             active_system_instruction = self.default_system_prompt
         else:
             active_system_instruction = self.DEFAULT_MODIFY_SYSTEM_INSTRUCTION
+
+        gemini_contents = []
+        if history:
+            for item in history:
+                role = "user" if item.get("role") == "user" else "model"
+                content_text = item.get("text") or item.get("content")
+                if content_text:
+                    gemini_contents.append({"role": role, "parts": [content_text]})
         
         user_prompt_for_modification = (
             f"Issue/Request: {issue_description}\n\n"
@@ -394,13 +502,23 @@ class GeminiClient(BaseLLMConnector):
             "Please provide the modified code snippet."
         )
 
-        prompt_parts = [active_system_instruction, user_prompt_for_modification]
+        final_prompt_parts = []
+        if not gemini_contents and active_system_instruction:
+            final_prompt_parts.append({"role": "user", "parts": [active_system_instruction, user_prompt_for_modification]})
+        else:
+            final_prompt_parts.extend(gemini_contents)
+            current_turn_parts = []
+            if active_system_instruction and not history: # Apply system instruction if no history
+                current_turn_parts.append(active_system_instruction)
+            current_turn_parts.append(user_prompt_for_modification)
+            final_prompt_parts.append({"role": "user", "parts": current_turn_parts})
         
-        # For now, using instance default generation config.
-        current_generation_config = self.default_generation_config 
+        current_generation_config = self.default_generation_config
 
         try:
-            response = self._generate_content_raw(prompt_parts, method_generation_config=current_generation_config)
+            if not final_prompt_parts:
+                raise GeminiModificationError("User prompt for modification is empty and no history provided.")
+            response = self._generate_content_raw(final_prompt_parts, method_generation_config=current_generation_config)
 
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 error_msg = f"Code modification prompt blocked. Reason: {self._get_enum_name(response.prompt_feedback.block_reason)}"
