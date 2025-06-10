@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   listAvailableModels: () => ipcRenderer.invoke('listAvailableModels'),
   getActiveModel: () => ipcRenderer.invoke('getActiveModel'),
   setActiveModel: (modelId) => ipcRenderer.invoke('setActiveModel', modelId),
+  getConfig: () => ipcRenderer.invoke('get-llm-config'), // Added for LLM config
   // sendPrompt: (prompt) => ipcRenderer.invoke('sendPrompt', prompt), // OLD request-response
 
   // NEW for streaming:

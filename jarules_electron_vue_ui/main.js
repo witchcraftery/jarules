@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron'); // Ensure ipcMain is imported here
 const path = require('path');
+const fs = require('fs/promises');
 const { PythonShell } = require('python-shell');
 
 // Determine if running in development or production
@@ -211,6 +212,22 @@ app.whenReady().then(async () => {
         console.log('[IPC Main] PythonShell execution finished successfully (code, signal):', code, signal);
       }
     });
+  });
+
+  // --- LLM Configuration IPC Handler ---
+  ipcMain.handle('get-llm-config', async () => {
+    try {
+      // __dirname is jarules_electron_vue_ui/
+      // config/ is at the project root, so one level up from __dirname
+      const configPath = path.join(__dirname, '../config/llm_config.yaml');
+      const data = await fs.readFile(configPath, 'utf8');
+      return data;
+    } catch (error) {
+      console.error('Failed to read llm_config.yaml:', error);
+      // Return null or an error object, depending on how the renderer should handle it
+      // For consistency with other handlers that might return data or error states:
+      return { error: true, message: 'Failed to read LLM configuration.', details: error.message };
+    }
   });
 
   // --- Chat History IPC Handlers ---
