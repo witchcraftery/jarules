@@ -64,6 +64,11 @@
 
     <!-- Prompt Input Area -->
     <ChatInput @send-prompt="handleSendPrompt" :is-streaming="isStreaming" />
+
+    <!-- Configuration Display Area -->
+    <div class="config-area">
+      <ConfigurationDisplay />
+    </div>
   </div>
 </template>
 
@@ -71,6 +76,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue';
 import MessageDisplay from './components/MessageDisplay.vue';
 import ChatInput from './components/ChatInput.vue';
+import ConfigurationDisplay from './components/ConfigurationDisplay.vue'; // Added import
 
 const message = ref('Hello from JaRules (Electron + Vue.js + Vite!)');
 const versions = ref({ electron: '', node: '', chrome: '' });
@@ -522,7 +528,7 @@ p.feedback-message {
 
 
 /* Chat messages display area */
-.chat-display-area {
+.chat-display-area { /* This class is not used on MessageDisplay directly, but similar styling is in MessageDisplay.vue */
   flex-grow: 1;
   overflow-y: auto;
   padding: 10px;
@@ -531,38 +537,10 @@ p.feedback-message {
   border-radius: 4px;
   margin-bottom: 10px;
 }
-.message {
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  max-width: 90%;
-}
-.message.user {
-  background-color: #007bff;
-  color: white;
-  margin-left: auto;
-  border-bottom-right-radius: 0;
-}
-.message.assistant {
-  background-color: #e9ecef;
-  color: #343a40;
-  margin-right: auto;
-  border-bottom-left-radius: 0;
-}
-.message.error {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-.streaming-indicator {
-  font-style: italic;
-  color: #6c757d;
-}
+/* MessageDisplay.vue has its own styles for .message, .user, .assistant etc. */
 
 
-.prompt-test {
+.prompt-test { /* This class is from an old version or example, ChatInput.vue has its own styling */
   display: flex;
   padding: 10px;
   border: 1px solid #ced4da;
@@ -607,8 +585,6 @@ p.feedback-message {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  /* position: sticky; Removed sticky as it complicates padding on #app-container */
-  /* top: 0; */
   z-index: 1000;
   flex-shrink: 0; /* Prevent banner from shrinking */
 }
@@ -666,5 +642,14 @@ p.feedback-message {
   padding: 15px;
   font-style: italic;
   color: #6c757d;
+}
+
+.config-area { /* Added style */
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #dee2e6; /* A subtle separator */
+  flex-shrink: 0; /* Prevent it from shrinking if content above grows */
+  max-height: 300px; /* Example max height, adjust as needed */
+  overflow-y: auto; /* Allow scrolling if content is taller than max-height */
 }
 </style>

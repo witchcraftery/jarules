@@ -46,6 +46,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "js-yaml": "^4.1.0",
     "python-shell": "^5.0.0",
     "vue": "^3.5.16"
   }
