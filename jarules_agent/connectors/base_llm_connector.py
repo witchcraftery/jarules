@@ -26,17 +26,18 @@ class BaseLLMConnector(ABC):
         self.model_name = model_name
         # Allow subclasses to use additional configuration via kwargs
         # For example, api_key, base_url, etc.
-        self._config = kwargs 
+        self._config = kwargs
         super().__init__()
 
     @abstractmethod
-    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def generate_code(self, user_prompt: str, system_instruction: Optional[str] = None, history: Optional[list[dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Generates code based on a user prompt and optional system instructions.
 
         Args:
             user_prompt: The user's direct request for code generation.
             system_instruction: Optional. Guiding instruction for the model's behavior or output format.
+            history: Optional. A list of dictionaries representing the conversation history.
             **kwargs: Additional provider-specific parameters for generation.
 
         Returns:
@@ -48,13 +49,14 @@ class BaseLLMConnector(ABC):
         pass
 
     @abstractmethod
-    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, history: Optional[list[dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Explains a given code snippet.
 
         Args:
             code_snippet: The string containing the code to be explained.
             system_instruction: Optional. Guiding instruction for the model's explanation.
+            history: Optional. A list of dictionaries representing the conversation history.
             **kwargs: Additional provider-specific parameters.
 
         Returns:
@@ -66,7 +68,7 @@ class BaseLLMConnector(ABC):
         pass
 
     @abstractmethod
-    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+    def suggest_code_modification(self, code_snippet: str, issue_description: str, system_instruction: Optional[str] = None, history: Optional[list[dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Suggests modifications to a given code snippet based on an issue description.
 
@@ -74,11 +76,12 @@ class BaseLLMConnector(ABC):
             code_snippet: The string containing the code to be modified.
             issue_description: A natural language description of the desired modification or fix.
             system_instruction: Optional. Guiding instruction for the model.
+            history: Optional. A list of dictionaries representing the conversation history.
             **kwargs: Additional provider-specific parameters.
 
         Returns:
             The suggested modified code as a string, or None if generation fails/is blocked.
-            
+
         Raises:
             LLMConnectorError: If an error occurs during code modification suggestion.
         """
