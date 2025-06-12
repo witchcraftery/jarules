@@ -64,7 +64,24 @@ contextBridge.exposeInMainWorld('api', {
     node: process.versions.node,
     chrome: process.versions.chrome,
     electron: process.versions.electron,
-  })
+  }),
+
+  // Parallel Git Task APIs
+  startParallelGitTask: (taskDetails) => ipcRenderer.invoke('start-parallel-git-task', taskDetails),
+  finalizeSelectedGitVersion: (finalizationDetails) => ipcRenderer.invoke('finalize-selected-git-version', finalizationDetails),
+  retryAgentGitTask: (retryDetails) => ipcRenderer.invoke('retry-agent-git-task', retryDetails),
+  cancelParallelRun: (runId) => ipcRenderer.invoke('cancel-parallel-git-run', runId),
+
+  // Listener setup functions
+  onParallelGitTaskUpdate: (callback) => ipcRenderer.on('parallel-git-task-update', (_event, value) => callback(value)),
+  onParallelGitRunCompleted: (callback) => ipcRenderer.on('parallel-git-run-completed', (_event, value) => callback(value)),
+
+  // Function to clean up listeners (important for components being unmounted or re-created)
+  cleanupParallelTaskListeners: () => {
+    ipcRenderer.removeAllListeners('parallel-git-task-update');
+    ipcRenderer.removeAllListeners('parallel-git-run-completed');
+    console.log('[Preload] Cleaned up all Parallel Git Task stream listeners.');
+  }
 });
 
 
