@@ -95,11 +95,37 @@ This phase aims to integrate more sophisticated interactions and robust operatio
         *   `App.vue` manages an `isStreaming` ref to control UI elements.
         *   The `onDone` and `onError` callbacks for `sendPromptStreaming` in `App.vue` have been updated to check for the `cancelled: true` flag to correctly update the UI and the content of the assistant's message.
 *   **Pre-flight Checks / Diagnostics**:
-    *   Implement a system within the Electron app to verify essential backend components:
-        *   Python environment accessibility and `python-shell` compatibility.
-        *   Connectivity to active LLM provider (using `check_availability` from the connector).
-        *   Basic syntax validation of `llm_config.yaml` and `user_state.json`.
-    *   Display results in a dedicated diagnostics panel or on startup, guiding users to troubleshoot common issues.
+    *   **Objective**: To provide users with a way to verify essential backend components, configurations, and connectivity, aiding in troubleshooting common issues.
+    *   **UI Implementation**:
+        *   A new `DiagnosticsPanel.vue` component has been created.
+        *   This panel is accessible via a toggle button ("Show/Hide Diagnostics") in the main application view (`App.vue`).
+        *   The panel displays a list of diagnostic checks, each with a user-friendly name, status (success, warning, error), a descriptive message, and optional technical details.
+        *   A "Run Diagnostic Checks" button within the panel allows users to initiate the checks on demand.
+    *   **IPC Channels & Data Structures**:
+        *   **From UI (Renderer) to Main Process**:
+            *   `window.api.runAllDiagnostics()`:
+                *   **Channel Invoked**: `'run-all-diagnostics'`
+                *   **Payload**: None.
+                *   **Expected Async Response**: An array of `DiagnosticCheckResult` objects, returned after all checks complete.
+        *   **From Main Process to UI (Renderer) - Optional Real-time Updates**:
+            *   `window.api.onDiagnosticCheckUpdate(callback)` listens on channel `'diagnostic-check-update'`.
+            *   **Payload**: A single `DiagnosticCheckResult` object.
+        *   **`DiagnosticCheckResult` Object Structure**:
+            ```json
+            {
+              "id": "string",         // Unique ID (e.g., "python-env", "llm-config-syntax")
+              "name": "string",       // User-friendly name (e.g., "Python Environment Check")
+              "status": "string",     // 'success', 'warning', 'error', 'running'
+              "message": "string",    // User-friendly result summary/guidance
+              "details": "string",    // Optional verbose technical output
+              "timestamp": "string"   // ISO 8601 timestamp of the check
+            }
+            ```
+    *   **Conceptual Backend Checks (handled by `main.js` and Python helper scripts)**:
+        *   **Python Environment**: Verifies Python accessibility and version.
+        *   **Configuration File Syntax**: Validates `llm_config.yaml` (YAML syntax) and `user_state.json` (JSON syntax).
+        *   **Active LLM Provider Connectivity**: Attempts a basic connection or status check to the currently configured LLM provider (e.g., using a `check_availability()` method in the respective LLM connector).
+    *   **Listener Cleanup**: `window.api.cleanupDiagnosticListeners()` is available to remove listeners for `'diagnostic-check-update'`.
 
 ### Electron UI - Phase 2.5: Asynchronous Git-Split Task Completion
 This phase introduces a novel approach to task execution by leveraging Git branches for parallel sub-agent work.

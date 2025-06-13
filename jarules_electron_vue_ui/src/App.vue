@@ -49,12 +49,21 @@
         <p v-if="setModelMessage" class="feedback-message">{{ setModelMessage }}</p>
       </div>
 
-      <div class="history-controls">
-        <h3>Chat History</h3>
-        <button @click="handleClearHistory" :disabled="isStreaming || isLoadingClearHistory || chatMessages.length === 0">
-          {{ isLoadingClearHistory ? 'Clearing...' : 'Clear Chat History' }}
-        </button>
-        <p v-if="historyStatusMessage" class="feedback-message">{{ historyStatusMessage }}</p>
+      <div class="controls-group"> <!-- New wrapper for history and diagnostics toggle -->
+        <div class="history-controls">
+          <h3>Chat History</h3>
+          <button @click="handleClearHistory" :disabled="isStreaming || isLoadingClearHistory || chatMessages.length === 0">
+            {{ isLoadingClearHistory ? 'Clearing...' : 'Clear Chat History' }}
+          </button>
+          <p v-if="historyStatusMessage" class="feedback-message">{{ historyStatusMessage }}</p>
+        </div>
+
+        <div class="diagnostics-toggle-container">
+          <h3>Diagnostics</h3>
+          <button @click="toggleDiagnosticsPanel" class="toggle-diagnostics-button">
+            {{ showDiagnosticsPanel ? 'Hide' : 'Show' }} Diagnostics
+          </button>
+        </div>
       </div>
     </div> <!-- End of top-panel -->
 
@@ -111,6 +120,11 @@
         <button @click="cancelCurrentParallelRun" class="cancel-parallel-run-button">Cancel Entire Run</button>
       </div>
     </div>
+
+    <!-- ... after existing content like parallel-task-section or config-area ... -->
+    <div v-if="showDiagnosticsPanel" class="diagnostics-section-wrapper">
+      <DiagnosticsPanel />
+    </div>
   </div>
 </template>
 
@@ -122,6 +136,7 @@ import ConfigurationDisplay from './components/ConfigurationDisplay.vue'; // Add
 import TaskDefinitionInput from './components/TaskDefinitionInput.vue';
 import SubAgentSelector from './components/SubAgentSelector.vue';
 import ParallelTaskDisplay from './components/ParallelTaskDisplay.vue';
+import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
 
 const message = ref('Hello from JaRules (Electron + Vue.js + Vite!)');
 const versions = ref({ electron: '', node: '', chrome: '' });
@@ -143,6 +158,7 @@ const selectedAgentsForTask = ref([]); // Array of agent objects
 const activeParallelRun = ref(null); // Will hold data for ParallelTaskDisplay
 // Example: { runId: 'run-xyz', taskDescription: '...', agents: [ {id: '...', name: '...', status: 'Pending'} ] }
 const showParallelProcessingUI = ref(false); // To toggle visibility of the parallel processing section
+const showDiagnosticsPanel = ref(false); // Initially hidden
 
 
 // Computed property to get the full details of the active model
@@ -690,6 +706,10 @@ function resetParallelTaskUI() {
   dismissGlobalError();
 }
 
+function toggleDiagnosticsPanel() {
+  showDiagnosticsPanel.value = !showDiagnosticsPanel.value;
+}
+
 onBeforeUnmount(() => {
   if (window.api && typeof window.api.cleanupPromptListeners === 'function') {
     window.api.cleanupPromptListeners();
@@ -1081,5 +1101,45 @@ p.feedback-message {
   background-color: #6c757d;
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.controls-group {
+  display: flex;
+  flex-direction: column; /* Stack history and diagnostics toggle vertically */
+  gap: 15px; /* Space between history and diagnostics sections */
+  flex: 1;
+}
+
+.diagnostics-toggle-container {
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: #fff;
+  text-align: center; /* Center the button */
+}
+
+.diagnostics-toggle-container h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+.toggle-diagnostics-button {
+  padding: 10px 18px;
+  background-color: #17a2b8; /* Info color */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+.toggle-diagnostics-button:hover {
+  background-color: #138496;
+}
+
+.diagnostics-section-wrapper {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #6c757d; /* Darker separator */
 }
 </style>

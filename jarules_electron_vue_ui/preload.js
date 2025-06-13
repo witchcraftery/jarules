@@ -82,6 +82,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('parallel-git-task-update');
     ipcRenderer.removeAllListeners('parallel-git-run-completed');
     console.log('[Preload] Cleaned up all Parallel Git Task stream listeners.');
+  },
+
+  // Diagnostics APIs
+  runAllDiagnostics: () => ipcRenderer.invoke('run-all-diagnostics'),
+
+  // Sets up a global listener. App.vue should manage calling cleanup.
+  onDiagnosticCheckUpdate: (callback) => ipcRenderer.on('diagnostic-check-update', (_event, value) => callback(value)),
+
+  cleanupDiagnosticListeners: () => { // Use this name
+    ipcRenderer.removeAllListeners('diagnostic-check-update');
+    console.log('[Preload] Cleaned up all Diagnostic listeners.');
   }
 });
 
