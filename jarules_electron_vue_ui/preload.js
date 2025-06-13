@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   setActiveModel: (modelId) => ipcRenderer.invoke('setActiveModel', modelId),
   getConfig: () => ipcRenderer.invoke('get-llm-config'), // Added for LLM config
   // sendPrompt: (prompt) => ipcRenderer.invoke('sendPrompt', prompt), // OLD request-response
+  stopGeneration: () => ipcRenderer.invoke('stop-llm-generation'),
 
   // NEW for streaming:
   // The Vue component will pass callback functions to handle different stream events.
@@ -81,6 +82,19 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('parallel-git-task-update');
     ipcRenderer.removeAllListeners('parallel-git-run-completed');
     console.log('[Preload] Cleaned up all Parallel Git Task stream listeners.');
+
+  },
+
+  // Diagnostics APIs
+  runAllDiagnostics: () => ipcRenderer.invoke('run-all-diagnostics'),
+
+  // Sets up a global listener. App.vue should manage calling cleanup.
+  onDiagnosticCheckUpdate: (callback) => ipcRenderer.on('diagnostic-check-update', (_event, value) => callback(value)),
+
+  cleanupDiagnosticListeners: () => { // Use this name
+    ipcRenderer.removeAllListeners('diagnostic-check-update');
+    console.log('[Preload] Cleaned up all Diagnostic listeners.');
+
   }
 });
 

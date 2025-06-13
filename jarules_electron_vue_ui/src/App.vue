@@ -49,12 +49,21 @@
         <p v-if="setModelMessage" class="feedback-message">{{ setModelMessage }}</p>
       </div>
 
-      <div class="history-controls">
-        <h3>Chat History</h3>
-        <button @click="handleClearHistory" :disabled="isStreaming || isLoadingClearHistory || chatMessages.length === 0">
-          {{ isLoadingClearHistory ? 'Clearing...' : 'Clear Chat History' }}
-        </button>
-        <p v-if="historyStatusMessage" class="feedback-message">{{ historyStatusMessage }}</p>
+      <div class="controls-group"> <!-- New wrapper for history and diagnostics toggle -->
+        <div class="history-controls">
+          <h3>Chat History</h3>
+          <button @click="handleClearHistory" :disabled="isStreaming || isLoadingClearHistory || chatMessages.length === 0">
+            {{ isLoadingClearHistory ? 'Clearing...' : 'Clear Chat History' }}
+          </button>
+          <p v-if="historyStatusMessage" class="feedback-message">{{ historyStatusMessage }}</p>
+        </div>
+
+        <div class="diagnostics-toggle-container">
+          <h3>Diagnostics</h3>
+          <button @click="toggleDiagnosticsPanel" class="toggle-diagnostics-button">
+            {{ showDiagnosticsPanel ? 'Hide' : 'Show' }} Diagnostics
+          </button>
+        </div>
       </div>
     </div> <!-- End of top-panel -->
 
@@ -63,7 +72,15 @@
     <MessageDisplay :messages="chatMessages" />
 
     <!-- Prompt Input Area -->
-    <ChatInput @send-prompt="handleSendPrompt" :is-streaming="isStreaming" />
+    <div class="chat-controls-container"> <!-- New wrapper for input and stop button -->
+      <ChatInput @send-prompt="handleSendPrompt" :is-streaming="isStreaming" />
+      <button
+        v-if="isStreaming"
+        @click="stopGenerationHandler"
+        class="stop-generation-button">
+        Stop Generating
+      </button>
+    </div>
 
     <!-- Configuration Display Area -->
     <div class="config-area">
@@ -103,6 +120,11 @@
         <button @click="cancelCurrentParallelRun" class="cancel-parallel-run-button">Cancel Entire Run</button>
       </div>
     </div>
+
+    <!-- ... after existing content like parallel-task-section or config-area ... -->
+    <div v-if="showDiagnosticsPanel" class="diagnostics-section-wrapper">
+      <DiagnosticsPanel />
+    </div>
   </div>
 </template>
 
@@ -114,6 +136,8 @@ import ConfigurationDisplay from './components/ConfigurationDisplay.vue'; // Add
 import TaskDefinitionInput from './components/TaskDefinitionInput.vue';
 import SubAgentSelector from './components/SubAgentSelector.vue';
 import ParallelTaskDisplay from './components/ParallelTaskDisplay.vue';
+import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
+
 
 const message = ref('Hello from JaRules (Electron + Vue.js + Vite!)');
 const versions = ref({ electron: '', node: '', chrome: '' });
@@ -135,6 +159,8 @@ const selectedAgentsForTask = ref([]); // Array of agent objects
 const activeParallelRun = ref(null); // Will hold data for ParallelTaskDisplay
 // Example: { runId: 'run-xyz', taskDescription: '...', agents: [ {id: '...', name: '...', status: 'Pending'} ] }
 const showParallelProcessingUI = ref(false); // To toggle visibility of the parallel processing section
+const showDiagnosticsPanel = ref(false); // Initially hidden
+
 
 
 // Computed property to get the full details of the active model
@@ -148,7 +174,7 @@ const activeModelDetails = computed(() => {
 // For chat interaction
 const chatMessages = ref([]);
 const isStreaming = ref(false);
-let currentAssistantMessageId = null;
+const currentAssistantMessageId = ref(null);
 
 // Global Error Handling
 function setGlobalError(message, details = '') {
@@ -254,9 +280,9 @@ async function handleSendPrompt(promptText) {
     window.api.addChatMessage({ id: userMessage.id, text: userMessage.text, sender: userMessage.sender });
   }
 
-  currentAssistantMessageId = Date.now() + 1;
+  currentAssistantMessageId.value = Date.now() + 1;
   chatMessages.value.push({
-    id: currentAssistantMessageId,
+    id: currentAssistantMessageId.value,
     text: '',
     sender: 'assistant',
     isStreaming: true,
@@ -267,7 +293,7 @@ async function handleSendPrompt(promptText) {
 
   const onStart = (startMsg) => {
     console.log('Stream started:', startMsg);
-    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId);
+    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId.value);
     if (assistantMsg) {
       assistantMsg.isStreaming = true;
     }
@@ -289,41 +315,55 @@ async function handleSendPrompt(promptText) {
 
   const onError = (errorMsg) => {
     console.error('Stream error callback:', errorMsg);
-    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId);
+    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId.value);
     if (assistantMsg) {
-      assistantMsg.text += `\n--- ERROR: ${errorMsg.message} ---`;
-      if(errorMsg.details) assistantMsg.text += `\nDetails: ${errorMsg.details}`;
-      assistantMsg.error = true;
+      // If message indicates cancellation, make it less like a typical error
+      if (errorMsg.cancelled) {
+          assistantMsg.text += errorMsg.message ? ` [${errorMsg.message}]` : " [Generation Cancelled by User]";
+          assistantMsg.error = false; // Not a typical error state
+      } else {
+          assistantMsg.text += `\n--- ERROR: ${errorMsg.message} ---`;
+          if(errorMsg.details) assistantMsg.text += `\nDetails: ${errorMsg.details}`;
+          assistantMsg.error = true;
+      }
       assistantMsg.isStreaming = false;
       if (window.api && typeof window.api.addChatMessage === 'function') {
-        window.api.addChatMessage({ id: assistantMsg.id, text: assistantMsg.text, sender: 'assistant', error: true });
+        window.api.addChatMessage({ id: assistantMsg.id, text: assistantMsg.text, sender: 'assistant', error: assistantMsg.error });
       }
     }
-    isStreaming.value = false;
-    if (!globalError.value.active) {
+    isStreaming.value = false; // Ensure global streaming flag is off
+    currentAssistantMessageId.value = null; // Reset current message ID
+    // Set global error only if not already handled or if it's a different error, and not a user cancellation
+    if (!errorMsg.cancelled && (!globalError.value.active || !globalError.value.message.includes(errorMsg.message))) {
         setGlobalError(`Streaming Error: ${errorMsg.message}`, errorMsg.details);
     }
   };
 
   const onDone = (doneMsg) => {
     console.log('Stream finished:', doneMsg);
-    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId);
+    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId.value);
     if (assistantMsg) {
-      if (doneMsg.success && doneMsg.full_response) {
-        // assistantMsg.text = doneMsg.full_response;
+      if (doneMsg.cancelled) { // NEW: Check for a 'cancelled' flag from backend
+        assistantMsg.text += doneMsg.message ? ` [${doneMsg.message}]` : " [Generation Cancelled]";
+        assistantMsg.isStreaming = false;
+      } else if (doneMsg.success && doneMsg.full_response) {
+        // assistantMsg.text = doneMsg.full_response; // Full response might be too much if appending chunks
       } else if (!doneMsg.success && doneMsg.error) {
          assistantMsg.text += `\n--- Error: ${doneMsg.error} ---`;
          if(doneMsg.details) assistantMsg.text += `\nDetails: ${doneMsg.details}`;
          assistantMsg.error = true;
-         setGlobalError(`LLM Error: ${doneMsg.error}`, doneMsg.details);
+         // Set global error only if not already handled by stopGenerationHandler or if it's a different error
+         if (!globalError.value.active || !globalError.value.message.includes(doneMsg.error)) {
+              setGlobalError(`LLM Error: ${doneMsg.error}`, doneMsg.details);
+         }
       }
       assistantMsg.isStreaming = false;
       if (window.api && typeof window.api.addChatMessage === 'function') {
          window.api.addChatMessage({ id: assistantMsg.id, text: assistantMsg.text, sender: 'assistant', error: assistantMsg.error || false });
       }
     }
-    isStreaming.value = false;
-    currentAssistantMessageId = null;
+    isStreaming.value = false; // Ensure global streaming flag is off
+    currentAssistantMessageId.value = null; // Reset current message ID
   };
 
   window.api.sendPromptStreaming(promptText, onStart, onChunk, onError, onDone);
@@ -353,6 +393,46 @@ async function handleClearHistory() {
         setTimeout(() => { historyStatusMessage.value = ''; }, 3000);
     }
   }
+}
+
+async function stopGenerationHandler() {
+  if (!isStreaming.value) return;
+
+  console.log("Attempting to stop LLM generation...");
+  try {
+    const result = await window.api.stopGeneration(); // Assumes preload.js is updated
+    if (result && result.success) {
+      console.log("Stop generation signal acknowledged by backend.");
+      setModelMessage.value = result.message || "Generation stop signal sent.";
+      // The backend is expected to trigger onDone/onError for the stream eventually.
+      // However, we can optimistically update some UI elements.
+    } else {
+      console.error("Backend failed to acknowledge stop signal:", result.error, result.details);
+      setGlobalError(result.error || "Failed to stop generation.", result.details || "The backend could not process the stop signal.");
+    }
+  } catch (error) {
+    console.error("IPC Error calling stopGeneration:", error);
+    setGlobalError("IPC Error", `Could not send stop signal: ${error.message}`);
+  }
+
+  // Optimistically update UI or wait for onDone/onError to be triggered by backend due to stop
+  // For a more immediate feel, we can do some things here:
+  isStreaming.value = false; // Stop any UI indicators tied directly to this ref
+
+  if (currentAssistantMessageId.value && chatMessages.value) {
+    const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId.value);
+    if (assistantMsg && assistantMsg.isStreaming) { // Check if it was indeed streaming
+      assistantMsg.text += " [Generation stopped by user]";
+      assistantMsg.isStreaming = false; // Ensure its own streaming flag is off
+      // Persist this change if needed (current onDone/onError handles final persistence)
+      // window.api.addChatMessage({ id: assistantMsg.id, text: assistantMsg.text, sender: 'assistant', error: assistantMsg.error || false });
+    }
+  }
+  // Note: The stream's onDone or onError should still be invoked by the backend
+  // to properly finalize the stream state and potentially save the message.
+  // If the backend doesn't explicitly call onDone/onError with a 'cancelled' status,
+  // this optimistic update might be all the user sees for the message content change.
+   setTimeout(() => { setModelMessage.value = ''; }, 3000);
 }
 
 async function loadHistory() {
@@ -626,6 +706,10 @@ function resetParallelTaskUI() {
   activeParallelRun.value = null;
   showParallelProcessingUI.value = false;
   dismissGlobalError();
+}
+
+function toggleDiagnosticsPanel() {
+  showDiagnosticsPanel.value = !showDiagnosticsPanel.value;
 }
 
 onBeforeUnmount(() => {
@@ -980,5 +1064,83 @@ p.feedback-message {
 }
 .cancel-parallel-run-button:hover {
   background-color: #c82333;
+}
+/* Add these new styles to App.vue's <style scoped> */
+
+.chat-controls-container {
+  display: flex; /* Align ChatInput and Stop button in a row */
+  align-items: center; /* Align items vertically */
+  gap: 10px; /* Space between ChatInput and Stop button */
+  margin-bottom: 10px; /* Space below this container */
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* If ChatInput needs to take up most of the space */
+.chat-controls-container > :first-child { /* Assuming ChatInput is the first child */
+  flex-grow: 1;
+}
+
+.stop-generation-button {
+  padding: 8px 15px;
+  background-color: #dc3545; /* Red color for stop/cancel */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: bold;
+  transition: background-color 0.2s ease-in-out, opacity 0.2s ease-in-out;
+  opacity: 1;
+  flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+.stop-generation-button:hover {
+  background-color: #c82333; /* Darker red on hover */
+}
+
+.stop-generation-button:disabled { /* Style if we were to disable it, though v-if removes it */
+  background-color: #6c757d;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.controls-group {
+  display: flex;
+  flex-direction: column; /* Stack history and diagnostics toggle vertically */
+  gap: 15px; /* Space between history and diagnostics sections */
+  flex: 1;
+}
+
+.diagnostics-toggle-container {
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: #fff;
+  text-align: center; /* Center the button */
+}
+
+.diagnostics-toggle-container h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+.toggle-diagnostics-button {
+  padding: 10px 18px;
+  background-color: #17a2b8; /* Info color */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+.toggle-diagnostics-button:hover {
+  background-color: #138496;
+}
+
+.diagnostics-section-wrapper {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #6c757d; /* Darker separator */
 }
 </style>
