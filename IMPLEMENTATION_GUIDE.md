@@ -71,8 +71,29 @@ This phase aims to integrate more sophisticated interactions and robust operatio
     *   This helps users understand available models and their configurations without directly editing YAML.
     *   (Future editable configuration will be a separate, more complex feature).
 *   **"Stop Generation" Functionality**:
-    *   Add a button to allow users to interrupt an in-progress LLM response stream.
-    *   This will require IPC communication to signal the Python backend (and `PythonShell` instance) to terminate the LLM call if possible, or at least stop forwarding chunks.
+    *   **Objective**: Allow users to interrupt an in-progress LLM response stream.
+    *   **UI Implementation**:
+        *   A "Stop Generating" button is added to `App.vue`, visible only when an LLM response is actively streaming (`isStreaming` ref is true).
+        *   Clicking the button calls `window.api.stopGeneration()` via `preload.js`.
+        *   The UI optimistically sets its `isStreaming` state to `false` and appends a "[Generation stopped by user]" message to the current assistant output.
+    *   **IPC Channel (Renderer to Main)**:
+        *   `window.api.stopGeneration()`:
+            *   **Channel Invoked**: `'stop-llm-generation'`
+            *   **Payload**: None (assumes a single active LLM stream context for the chat UI).
+            *   **Expected Async Response (from main process via `invoke`)**:
+                ```json
+                // On success:
+                { "success": true, "message": "LLM generation stop signal processed." }
+                // On failure:
+                { "success": false, "error": "Brief error message (e.g., 'Failed to send stop signal')", "details": "More detailed error information." }
+                ```
+    *   **Backend Behavior (`main.js` / Python)**:
+        *   The handler for `'stop-llm-generation'` in `main.js` should attempt to terminate the associated `PythonShell` instance or signal the Python script to halt LLM processing.
+        *   Crucially, upon successful interruption (or even if termination is forceful), the backend **must** ensure that the original `sendPromptStreaming` IPC's `onDone` or `onError` callback is triggered for the renderer process.
+        *   This callback's payload should include a property like `cancelled: true` (e.g., `onDone({ cancelled: true, message: "Stream stopped by user" })`) to allow the UI to distinguish a user-initiated stop from a natural end-of-stream or a genuine error. This allows the UI to finalize the assistant's message correctly without displaying an erroneous error state.
+    *   **UI State Management**:
+        *   `App.vue` manages an `isStreaming` ref to control UI elements.
+        *   The `onDone` and `onError` callbacks for `sendPromptStreaming` in `App.vue` have been updated to check for the `cancelled: true` flag to correctly update the UI and the content of the assistant's message.
 *   **Pre-flight Checks / Diagnostics**:
     *   Implement a system within the Electron app to verify essential backend components:
         *   Python environment accessibility and `python-shell` compatibility.
@@ -95,6 +116,121 @@ This phase introduces a novel approach to task execution by leveraging Git branc
     *   Backend logic for orchestrating multiple LLM agent calls in parallel.
     *   Robust Git integration for branch creation, file management, commits, diff generation, and cleanup (likely using `gitpython` or direct CLI calls from Python).
     *   Logic for PR creation (e.g., via GitHub API connector).
+
+#### IPC Interface for Parallel Tasks
+
+This section details the Inter-Process Communication (IPC) channels and data structures used by the Electron UI (Vue.js frontend) to interact with the main process (and subsequently the Python backend) for managing parallel Git tasks. These APIs are exposed via `window.api` in the renderer process, facilitated by `preload.js`.
+
+**From UI (Renderer) to Main Process:**
+
+1.  **`window.api.startParallelGitTask(taskDetails)`**
+    *   **Channel Invoked**: `'start-parallel-git-task'`
+    *   **Payload** (`taskDetails`: Object):
+        ```json
+        {
+          "taskDescription": "User's detailed task prompt for the LLM agents.",
+          "selectedAgents": [
+            {
+              "id": "gemini_default",
+              "name": "Gemini (Default: gemini-pro)",
+              "provider": "gemini",
+              "model": "gemini-pro"
+              /* Other relevant agent configuration details can be included if needed by the backend */
+            }
+            // ... more selected agent objects
+          ]
+        }
+        ```
+    *   **Expected Async Response** (from main process via `invoke`):
+        ```json
+        // On success:
+        {
+          "success": true,
+          "runId": "unique-run-identifier-backend-generated",
+          "message": "Parallel task successfully initiated."
+        }
+        // On failure:
+        {
+          "success": false,
+          "error": "Brief error message (e.g., 'Setup Failed')",
+          "details": "More detailed error information."
+        }
+        ```
+
+2.  **`window.api.finalizeSelectedGitVersion(finalizationDetails)`**
+    *   **Channel Invoked**: `'finalize-selected-git-version'`
+    *   **Payload** (`finalizationDetails`: Object):
+        ```json
+        {
+          "runId": "The unique run identifier for the current parallel task.",
+          "selectedAgentId": "The ID of the agent whose version the user has chosen to finalize (e.g., merge or create PR)."
+        }
+        ```
+    *   **Expected Async Response**:
+        ```json
+        { "success": true, "message": "Version finalization process started (e.g., PR created)." }
+        // or
+        { "success": false, "error": "Finalization Failed", "details": "..." }
+        ```
+
+3.  **`window.api.retryAgentGitTask(retryDetails)`**
+    *   **Channel Invoked**: `'retry-agent-git-task'`
+    *   **Payload** (`retryDetails`: Object):
+        ```json
+        {
+          "runId": "The unique run identifier.",
+          "agentId": "The ID of the agent whose task needs to be retried."
+        }
+        ```
+    *   **Expected Async Response**:
+        ```json
+        { "success": true, "message": "Agent task retry process initiated." }
+        // or
+        { "success": false, "error": "Retry Initiation Failed", "details": "..." }
+        ```
+
+4.  **`window.api.cancelParallelRun(runId)`**
+    *   **Channel Invoked**: `'cancel-parallel-git-run'`
+    *   **Payload** (`runId`: String): The unique identifier of the parallel run to be cancelled.
+    *   **Expected Async Response**:
+        ```json
+        { "success": true, "message": "Parallel run cancellation requested." }
+        // or
+        { "success": false, "error": "Cancellation Failed", "details": "..." }
+        ```
+
+**From Main Process to UI (Renderer) - Via Listeners:**
+
+The UI sets up listeners using `window.api.onParallelGitTaskUpdate(...)` and `window.api.onParallelGitRunCompleted(...)`.
+
+1.  **`'parallel-git-task-update'`** (Event channel for individual agent updates)
+    *   **Payload** (`updateDetails`: Object):
+        ```json
+        {
+          "runId": "The unique run identifier.",
+          "agentId": "The ID of the agent being updated.",
+          "status": "Queued | Processing | Generating Diff | Completed | Error | Cancelled", // Current status of the agent's task
+          "progress": 0-100, // Optional: Overall progress percentage for this agent's task
+          "resultSummary": "A brief text summary of results, code snippet, or diff preview (especially if status is 'Completed').",
+          "error": true_or_false, // Boolean indicating if this update is an error state
+          "errorMessage": "Detailed error message if 'error' is true.",
+          "isProcessing": true_or_false // Explicit boolean indicating if the agent is still actively working.
+        }
+        ```
+
+2.  **`'parallel-git-run-completed'`** (Event channel for when an entire run finishes or is terminated)
+    *   **Payload** (`completionDetails`: Object):
+        ```json
+        {
+          "runId": "The unique run identifier.",
+          "overallStatus": "All Agents Complete | Finalized | Cancelled by User | Error Terminated", // Overall status of the run
+          "message": "Optional summary message about the run's completion."
+          // Optionally, include final outcomes or paths to artifacts if applicable.
+        }
+        ```
+
+**Note on `preload.js`:**
+The `preload.js` script also exposes `window.api.cleanupParallelTaskListeners()` which should be called by the UI when relevant components are unmounted to prevent memory leaks from IPC listeners.
 
 ### Electron UI - Phase 3: Polish & Packaging
 This phase focuses on refining the user experience, ensuring stability, and preparing the application for distribution.
