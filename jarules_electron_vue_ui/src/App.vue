@@ -138,6 +138,7 @@ import SubAgentSelector from './components/SubAgentSelector.vue';
 import ParallelTaskDisplay from './components/ParallelTaskDisplay.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
 
+
 const message = ref('Hello from JaRules (Electron + Vue.js + Vite!)');
 const versions = ref({ electron: '', node: '', chrome: '' });
 
@@ -159,6 +160,7 @@ const activeParallelRun = ref(null); // Will hold data for ParallelTaskDisplay
 // Example: { runId: 'run-xyz', taskDescription: '...', agents: [ {id: '...', name: '...', status: 'Pending'} ] }
 const showParallelProcessingUI = ref(false); // To toggle visibility of the parallel processing section
 const showDiagnosticsPanel = ref(false); // Initially hidden
+
 
 
 // Computed property to get the full details of the active model
@@ -1063,7 +1065,6 @@ p.feedback-message {
 .cancel-parallel-run-button:hover {
   background-color: #c82333;
 }
-
 /* Add these new styles to App.vue's <style scoped> */
 
 .chat-controls-container {

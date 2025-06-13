@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('parallel-git-task-update');
     ipcRenderer.removeAllListeners('parallel-git-run-completed');
     console.log('[Preload] Cleaned up all Parallel Git Task stream listeners.');
+
   },
 
   // Diagnostics APIs
@@ -93,6 +94,7 @@ contextBridge.exposeInMainWorld('api', {
   cleanupDiagnosticListeners: () => { // Use this name
     ipcRenderer.removeAllListeners('diagnostic-check-update');
     console.log('[Preload] Cleaned up all Diagnostic listeners.');
+
   }
 });
 
