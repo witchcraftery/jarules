@@ -49,6 +49,20 @@ class BaseLLMConnector(ABC):
         pass
 
     @abstractmethod
+    def check_availability(self) -> dict:
+        """
+        Checks the availability and status of the LLM service.
+
+        Returns:
+            A dictionary with keys like `available: bool` (boolean indicating if the service is usable)
+            and `details: str` (a message describing the status or any issues).
+
+        Raises:
+            LLMConnectorError: If an error occurs during the availability check.
+        """
+        pass
+
+    @abstractmethod
     def explain_code(self, code_snippet: str, system_instruction: Optional[str] = None, history: Optional[list[dict[str, str]]] = None, **kwargs: Any) -> Optional[str]:
         """
         Explains a given code snippet.

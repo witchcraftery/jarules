@@ -291,6 +291,107 @@ app.whenReady().then(async () => {
     }
   });
 
+  // --- Diagnostics IPC Handler ---
+  ipcMain.handle('run-all-diagnostics', async (event) => {
+    console.log('[IPC Main] Received run-all-diagnostics request.');
+    const diagnosticScripts = [
+      'check_python_environment_wrapper.py',
+      'check_config_files_wrapper.py',
+      'check_llm_connectivity_wrapper.py'
+    ];
+    const allResults = [];
+    const defaultTimestamp = () => new Date().toISOString();
+
+    for (const scriptName of diagnosticScripts) {
+      try {
+        const scriptOutput = await runPythonScript(scriptName);
+
+        // Check if runPythonScript itself returned an error structure
+        if (scriptOutput && scriptOutput.error === true) {
+          console.error(`[IPC Main] Error from runPythonScript for ${scriptName}:`, scriptOutput.message);
+          allResults.push({
+            id: `script-runner-error-${scriptName.replace('.py', '')}`,
+            name: scriptName,
+            status: 'error',
+            message: scriptOutput.message || `Failed to execute script ${scriptName} via runner.`,
+            details: scriptOutput.details || 'No details from script runner.',
+            timestamp: defaultTimestamp()
+          });
+          continue; // Move to the next script
+        }
+
+        // Validate scriptOutput structure (Python scripts should return valid JSON parsable by python-shell)
+        if (scriptOutput === null || typeof scriptOutput === 'undefined') {
+            console.error(`[IPC Main] No valid output from ${scriptName}. Received:`, scriptOutput);
+            allResults.push({
+                id: `script-output-error-${scriptName.replace('.py', '')}`,
+                name: scriptName,
+                status: 'error',
+                message: `Script ${scriptName} returned null or undefined output.`,
+                details: 'The script did not produce valid JSON output as expected.',
+                timestamp: defaultTimestamp()
+            });
+            continue;
+        }
+
+
+        const processSingleResult = (singleResult) => {
+          // Ensure basic structure and timestamp for each result from Python
+          if (!singleResult || typeof singleResult !== 'object') {
+            // This case should ideally be caught earlier if scriptOutput itself is not an object/array
+            return {
+              id: `malformed-result-${scriptName.replace('.py', '')}`,
+              name: scriptName,
+              status: 'error',
+              message: 'Malformed result object received from script.',
+              details: { originalOutput: singleResult },
+              timestamp: defaultTimestamp()
+            };
+          }
+          return {
+            id: singleResult.id || `unknown-id-${scriptName.replace('.py', '')}`,
+            name: singleResult.name || scriptName,
+            status: singleResult.status || 'error',
+            message: singleResult.message || 'No message provided.',
+            details: singleResult.details || {},
+            timestamp: singleResult.timestamp || defaultTimestamp()
+          };
+        };
+
+        if (scriptName === 'check_config_files_wrapper.py') {
+          if (Array.isArray(scriptOutput)) {
+            scriptOutput.forEach(item => allResults.push(processSingleResult(item)));
+          } else {
+            console.error(`[IPC Main] Expected array from ${scriptName}, got:`, typeof scriptOutput);
+            allResults.push(processSingleResult({ // Create a single error entry for the script itself
+                id: `script-type-error-${scriptName.replace('.py', '')}`,
+                name: scriptName,
+                status: 'error',
+                message: `Expected an array from ${scriptName} but received ${typeof scriptOutput}.`,
+                details: { receivedOutput: scriptOutput },
+                timestamp: defaultTimestamp()
+            }));
+          }
+        } else {
+          allResults.push(processSingleResult(scriptOutput));
+        }
+
+      } catch (error) { // Catch errors from runPythonScript call itself or unexpected issues
+        console.error(`[IPC Main] Critical error executing ${scriptName}:`, error);
+        allResults.push({
+          id: `ipc-script-execution-error-${scriptName.replace('.py', '')}`,
+          name: scriptName,
+          status: 'error',
+          message: `Failed to execute diagnostic script ${scriptName}.`,
+          details: { error: error.message, stack: error.stack },
+          timestamp: defaultTimestamp()
+        });
+      }
+    }
+    console.log('[IPC Main] Diagnostics complete. Results:', allResults.length);
+    return allResults;
+  });
+
 
   createWindow();
 
