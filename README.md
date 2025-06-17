@@ -185,21 +185,15 @@ python -m pytest jarules_agent/tests/test_llm_manager.py -v
 
 ## Development Status & Next Steps
 
-### **Current Development Priority (Post Multi-LLM Expansion)**
+### Current Development Priority (Electron UI - Phase 2)
 
-With the core multi-LLM capabilities and CLI-based model management now complete, the next major development thrusts are:
+With the core multi-LLM capabilities, CLI-based model management, and the foundational Electron UI (Phase 1) now complete, the next major development thrust is **Electron UI - Phase 2: Advanced Features & Foolproofing**. Key tasks include:
 
-1.  **Electron Interface Build**:
-    *   Develop a user-friendly desktop application using Electron for interacting with the agent.
-    *   Integrate existing CLI functionalities into the GUI.
-    *   Design UI/UX for model selection, configuration, and interaction.
-2.  **Advanced Agent Features**:
-    *   Explore and implement features like conversational memory, enhanced context management, and tool usage (function calling).
-    *   Investigate more complex workflow automation and planning capabilities.
-3.  **Documentation and Polish**:
-    *   Comprehensive user and developer documentation for all new features and connectors.
-    *   Refine error handling and user feedback across all interfaces.
-    *   Expand test coverage for integration scenarios.
+1.  **In-App Configuration UI (Read-Only First)**: Display `llm_config.yaml` content in a user-friendly, read-only format within the Electron app.
+2.  **"Stop Generation" Functionality**: Allow users to interrupt in-progress LLM response streams.
+3.  **Pre-flight Checks / Diagnostics**: Implement a panel to verify backend components, configurations, and connectivity.
+
+Following this, development will proceed to **Electron UI - Phase 2.5: Asynchronous Git-Split Task Completion** and then **Electron UI - Phase 3: Polish & Packaging**. Advanced agent features will be developed as a parallel track or subsequent major focus. Refer to `IMPLEMENTATION_GUIDE.md` for full details.
 
 ### **Long-term Vision**
 
