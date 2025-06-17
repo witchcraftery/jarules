@@ -319,6 +319,7 @@ async function handleSendPrompt(promptText) {
     if (assistantMsg) {
       // If message indicates cancellation, make it less like a typical error
       if (errorMsg.cancelled) {
+          assistantMsg.text = assistantMsg.text.replace(" [Generation stopped by user]", ""); // Remove optimistic message
           assistantMsg.text += errorMsg.message ? ` [${errorMsg.message}]` : " [Generation Cancelled by User]";
           assistantMsg.error = false; // Not a typical error state
       } else {
@@ -344,7 +345,8 @@ async function handleSendPrompt(promptText) {
     const assistantMsg = chatMessages.value.find(m => m.id === currentAssistantMessageId.value);
     if (assistantMsg) {
       if (doneMsg.cancelled) { // NEW: Check for a 'cancelled' flag from backend
-        assistantMsg.text += doneMsg.message ? ` [${doneMsg.message}]` : " [Generation Cancelled]";
+        assistantMsg.text = assistantMsg.text.replace(" [Generation stopped by user]", ""); // Remove optimistic message
+        assistantMsg.text += doneMsg.message ? ` [${doneMsg.message}]` : " [Generation Cancelled by User]"; // Harmonized message
         assistantMsg.isStreaming = false;
       } else if (doneMsg.success && doneMsg.full_response) {
         // assistantMsg.text = doneMsg.full_response; // Full response might be too much if appending chunks
