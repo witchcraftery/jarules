@@ -90,13 +90,17 @@ This is the most critical phase of your work as a sub-agent. The expectation is 
 2.  **Breakdown the Task:** Decompose the assigned task into smaller, actionable steps or components.
 3.  **Define Data Structures & Interfaces:** If your task involves data manipulation or communication between components, clearly define the structure of data objects, payloads, etc.
 4.  **Outline Logic:** For complex parts, outline the algorithmic logic or decision-making flow.
-5.  **Identify Dependencies & Coordination Points:** Note any dependencies on other tasks, other agents, or existing code.
-6.  **Consider Edge Cases & Error Handling:** Briefly think about potential edge cases or error conditions.
-7.  **Document Your Plan:** Write this detailed plan directly into the "Notes/Plans by Agent `<X>`:" section. Use Markdown formatting for clarity. The level of detail should be sufficient for another technically competent individual to understand your approach and for you to follow during (simulated) implementation.
-8.  **Document Key Decisions, Questions, and Dependencies:** Use the dedicated sub-sections ("Key Decisions & Rationale:", "Open Questions for Lead:", "Dependencies:") within "Notes/Plans by Agent `<X>`:" to explicitly note these important aspects of your plan. This helps in communication and tracking.
-9.  **Update Timestamp:** Whenever you significantly update your plan, update the "**Last Plan Update:**" timestamp at the beginning of your "Notes/Plans by Agent `<X>`:" section.
-10. **Update Status:** Once your detailed plan is documented, change the `Status:` field for that task in your file from "New" to "Planning Complete".
-11. **Notify Lead/User:** Inform the User/Project Manager or Lead Planner that your plan for Task ID `<task_id>` is complete and ready for review in `tasks/agent_<X>.md`.
+5.  **Define Output Expectations (for LLM-based tasks):** If the core of the task involves an LLM generating content (like code or summaries), the plan should include specific instructions for the LLM about its output. This includes:
+    *   The format and structure of the primary output (e.g., code files, a `solution_summary.md`).
+    *   **Explicitly listing key files created or modified:** The LLM should be prompted to provide a list of the primary files it has worked on. This list is crucial for subsequent review and integration steps. This list might be included within its `solution_summary.md` or as part of a structured status update.
+6.  **Identify Dependencies & Coordination Points:** Note any dependencies on other tasks, other agents, or existing code.
+7.  **Consider Edge Cases & Error Handling:** Briefly think about potential edge cases or error conditions.
+8.  **Document Your Plan:** Write this detailed plan directly into the "Notes/Plans by Agent `<X>`:" section. Use Markdown formatting for clarity. The level of detail should be sufficient for another technically competent individual to understand your approach and for you to follow during (simulated) implementation.
+9.  **Document Key Decisions, Questions, and Dependencies:** Use the dedicated sub-sections ("Key Decisions & Rationale:", "Open Questions for Lead:", "Dependencies:") within "Notes/Plans by Agent `<X>`:" to explicitly note these important aspects of your plan. This helps in communication and tracking.
+10. **Update Timestamp:** Whenever you significantly update your plan, update the "**Last Plan Update:**" timestamp at the beginning of your "Notes/Plans by Agent `<X>`:" section.
+11. **Update Status:** Once your detailed plan is documented, change the `Status:` field for that task in your file from "New" to "Planning Complete".
+12. **Notify Lead/User:** Inform the User/Project Manager or Lead Planner that your plan for Task ID `<task_id>` is complete and ready for review in `tasks/agent_<X>.md`.
+
 
 **2.3. (Simulated) Implementation and Progress Tracking**
 
@@ -126,7 +130,8 @@ To effectively complete your assigned tasks, be familiar with and regularly refe
 *   **`IMPLEMENTATION_GUIDE.md`:** Central document for milestones, phases, technical specifications, and contribution guidelines.
 *   **`README.md`:** High-level project overview, setup, and run instructions.
 *   **`resourcing/sub-agent-briefing-guide.md` (This Document):** Explains your workflow and task management.
-*   **`development-status.md`:** Tracks overall project status, priorities, and cross-agent dependencies (see Section 6).
+*   **`development-status.md`:** Tracks overall project status, priorities, and cross-agent dependencies. **It serves as the definitive source for current IPC channel names, expected payloads, and the status of shared integration points.** (see Section 6).
+
 
 **3.2. Configuration Files**
 
