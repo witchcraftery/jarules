@@ -9,6 +9,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 // --- Global variables to store LLM state in main process ---
 let currentActiveModelId = null;
 let currentAvailableModels = [];
+let currentPythonShellInstance = null; // For managing the LLM streaming process
 // --- Path to Python scripts ---
 // Assuming 'jarules_agent' is a sibling directory to 'jarules_electron_vue_ui'
 const jarulesAgentBaseDir = path.join(__dirname, '../../jarules_agent');
@@ -180,6 +181,7 @@ app.whenReady().then(async () => {
     };
 
     const pyshell = new PythonShell('send_prompt_wrapper.py', options);
+    currentPythonShellInstance = pyshell; // Assign to global variable
 
     // Optional: Send a message to renderer that streaming has started, if not implied by first chunk.
     // event.sender.send('llm:stream-started'); // Python script now sends a stream_start message
@@ -193,10 +195,13 @@ app.whenReady().then(async () => {
         event.sender.send('llm:stream-chunk', message);
       } else if (message.type === 'done') {
         event.sender.send('llm:stream-done', { success: true, ...message });
+        currentPythonShellInstance = null; // Clear instance on done
       } else if (message.type === 'error') {
         event.sender.send('llm:stream-error', message);
         // Also send 'done' because the stream has effectively ended, even with an error.
-        event.sender.send('llm:stream-done', { success: false, error: message.message });
+        // Pass cancelled flag if present in the error message from python
+        event.sender.send('llm:stream-done', { success: false, error: message.message, cancelled: message.cancelled });
+        currentPythonShellInstance = null; // Clear instance on error
       } else if (message.type === 'stream_start') {
          event.sender.send('llm:stream-started', message); // Forward start signal
       }
@@ -206,13 +211,54 @@ app.whenReady().then(async () => {
     pyshell.end(function (err, code, signal) {
       if (err) {
         console.error('[IPC Main] PythonShell execution finished with error:', err);
-        event.sender.send('llm:stream-error', { message: err.message || 'Python script execution failed.' });
-        event.sender.send('llm:stream-done', { success: false, error: err.message || 'Python script execution failed.' });
+        // Check if a stream-done hasn't already been sent by an error type message
+        if (currentPythonShellInstance) { // If null, means 'done' or 'error' message already handled it
+            event.sender.send('llm:stream-error', { message: err.message || 'Python script execution failed.' });
+            event.sender.send('llm:stream-done', { success: false, error: err.message || 'Python script execution failed.' });
+        }
       } else {
         console.log('[IPC Main] PythonShell execution finished successfully (code, signal):', code, signal);
+        // If it ended successfully without a 'done' message (e.g. script just exited), ensure renderer is notified.
+        if (currentPythonShellInstance) { // If null, 'done' message handled it.
+             event.sender.send('llm:stream-done', { success: true, message: "Stream ended without explicit done message."});
+        }
       }
+      currentPythonShellInstance = null; // Ensure cleared on any termination
     });
   });
+
+  // --- IPC Handler to Stop LLM Generation ---
+  ipcMain.handle('stop-llm-generation', async () => {
+    console.log('[IPC Main] Received stop-llm-generation request.');
+    if (currentPythonShellInstance && currentPythonShellInstance.childProcess && !currentPythonShellInstance.childProcess.killed) {
+      try {
+        console.log('[IPC Main] Attempting to send SIGUSR1 to Python process.');
+        const success = currentPythonShellInstance.childProcess.kill('SIGUSR1');
+        if (success) {
+          console.log('[IPC Main] Sent SIGUSR1 to Python process.');
+          return { success: true, message: 'Stop signal sent to LLM generation process.' };
+        } else {
+          // This case might be rare, as kill usually returns true if process exists,
+          // or throws if signal is invalid. But good to have a branch.
+          console.warn('[IPC Main] SIGUSR1 signal was not sent successfully (kill command returned false).');
+          return { success: false, error: 'Failed to send stop signal', details: 'The operation to send the signal returned false.' };
+        }
+      } catch (err) {
+        console.error('[IPC Main] Error sending SIGUSR1:', err);
+        // Check if the error is because the process is already dead
+        if (err.code === 'ESRCH') { // Error No Such Process
+            console.warn('[IPC Main] Attempted to signal a process that was already dead or gone.');
+            currentPythonShellInstance = null; // Ensure it's cleared
+            return { success: false, error: 'Process already terminated', details: 'The LLM process was not running or already finished.' };
+        }
+        return { success: false, error: 'Failed to send stop signal', details: err.message };
+      }
+    } else {
+      console.warn('[IPC Main] No active LLM generation process to stop or process already terminated.');
+      return { success: false, error: 'No active generation process', details: 'There is no LLM response currently streaming or the process has already ended.' };
+    }
+  });
+  // --- End Stop LLM Generation Handler ---
 
   // --- LLM Configuration IPC Handler ---
   ipcMain.handle('get-llm-config', async () => {
@@ -289,6 +335,107 @@ app.whenReady().then(async () => {
       console.error('[IPC Main] Unexpected error in history:clear IPC handler:', err);
       return {error: true, message: err.message || 'Failed to clear chat history.', details: String(err)};
     }
+  });
+
+  // --- Diagnostics IPC Handler ---
+  ipcMain.handle('run-all-diagnostics', async (event) => {
+    console.log('[IPC Main] Received run-all-diagnostics request.');
+    const diagnosticScripts = [
+      'check_python_environment_wrapper.py',
+      'check_config_files_wrapper.py',
+      'check_llm_connectivity_wrapper.py'
+    ];
+    const allResults = [];
+    const defaultTimestamp = () => new Date().toISOString();
+
+    for (const scriptName of diagnosticScripts) {
+      try {
+        const scriptOutput = await runPythonScript(scriptName);
+
+        // Check if runPythonScript itself returned an error structure
+        if (scriptOutput && scriptOutput.error === true) {
+          console.error(`[IPC Main] Error from runPythonScript for ${scriptName}:`, scriptOutput.message);
+          allResults.push({
+            id: `script-runner-error-${scriptName.replace('.py', '')}`,
+            name: scriptName,
+            status: 'error',
+            message: scriptOutput.message || `Failed to execute script ${scriptName} via runner.`,
+            details: scriptOutput.details || 'No details from script runner.',
+            timestamp: defaultTimestamp()
+          });
+          continue; // Move to the next script
+        }
+
+        // Validate scriptOutput structure (Python scripts should return valid JSON parsable by python-shell)
+        if (scriptOutput === null || typeof scriptOutput === 'undefined') {
+            console.error(`[IPC Main] No valid output from ${scriptName}. Received:`, scriptOutput);
+            allResults.push({
+                id: `script-output-error-${scriptName.replace('.py', '')}`,
+                name: scriptName,
+                status: 'error',
+                message: `Script ${scriptName} returned null or undefined output.`,
+                details: 'The script did not produce valid JSON output as expected.',
+                timestamp: defaultTimestamp()
+            });
+            continue;
+        }
+
+
+        const processSingleResult = (singleResult) => {
+          // Ensure basic structure and timestamp for each result from Python
+          if (!singleResult || typeof singleResult !== 'object') {
+            // This case should ideally be caught earlier if scriptOutput itself is not an object/array
+            return {
+              id: `malformed-result-${scriptName.replace('.py', '')}`,
+              name: scriptName,
+              status: 'error',
+              message: 'Malformed result object received from script.',
+              details: { originalOutput: singleResult },
+              timestamp: defaultTimestamp()
+            };
+          }
+          return {
+            id: singleResult.id || `unknown-id-${scriptName.replace('.py', '')}`,
+            name: singleResult.name || scriptName,
+            status: singleResult.status || 'error',
+            message: singleResult.message || 'No message provided.',
+            details: singleResult.details || {},
+            timestamp: singleResult.timestamp || defaultTimestamp()
+          };
+        };
+
+        if (scriptName === 'check_config_files_wrapper.py') {
+          if (Array.isArray(scriptOutput)) {
+            scriptOutput.forEach(item => allResults.push(processSingleResult(item)));
+          } else {
+            console.error(`[IPC Main] Expected array from ${scriptName}, got:`, typeof scriptOutput);
+            allResults.push(processSingleResult({ // Create a single error entry for the script itself
+                id: `script-type-error-${scriptName.replace('.py', '')}`,
+                name: scriptName,
+                status: 'error',
+                message: `Expected an array from ${scriptName} but received ${typeof scriptOutput}.`,
+                details: { receivedOutput: scriptOutput },
+                timestamp: defaultTimestamp()
+            }));
+          }
+        } else {
+          allResults.push(processSingleResult(scriptOutput));
+        }
+
+      } catch (error) { // Catch errors from runPythonScript call itself or unexpected issues
+        console.error(`[IPC Main] Critical error executing ${scriptName}:`, error);
+        allResults.push({
+          id: `ipc-script-execution-error-${scriptName.replace('.py', '')}`,
+          name: scriptName,
+          status: 'error',
+          message: `Failed to execute diagnostic script ${scriptName}.`,
+          details: { error: error.message, stack: error.stack },
+          timestamp: defaultTimestamp()
+        });
+      }
+    }
+    console.log('[IPC Main] Diagnostics complete. Results:', allResults.length);
+    return allResults;
   });
 
 

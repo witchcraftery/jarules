@@ -101,6 +101,7 @@ This is the most critical phase of your work as a sub-agent. The expectation is 
 11. **Update Status:** Once your detailed plan is documented, change the `Status:` field for that task in your file from "New" to "Planning Complete".
 12. **Notify Lead/User:** Inform the User/Project Manager or Lead Planner that your plan for Task ID `<task_id>` is complete and ready for review in `tasks/agent_<X>.md`.
 
+
 **2.3. (Simulated) Implementation and Progress Tracking**
 
 1.  **Follow Your Plan:** Execute each step of your documented plan sequentially.
@@ -130,6 +131,7 @@ To effectively complete your assigned tasks, be familiar with and regularly refe
 *   **`README.md`:** High-level project overview, setup, and run instructions.
 *   **`resourcing/sub-agent-briefing-guide.md` (This Document):** Explains your workflow and task management.
 *   **`development-status.md`:** Tracks overall project status, priorities, and cross-agent dependencies. **It serves as the definitive source for current IPC channel names, expected payloads, and the status of shared integration points.** (see Section 6).
+
 
 **3.2. Configuration Files**
 

@@ -13,12 +13,14 @@ This document tracks the overall development status, current priorities, feature
     *   **New Feature:** A "Download Agent Version as Zip" functionality will be added to the results preview UI.
     *   **Decision (Zip Download Flow):** The `'trigger-agent-version-zip'` IPC will return a temporary `downloadPath` and `filename` to the renderer. The renderer will then call a separate generic main process utility (e.g., `window.electron.requestFileDownload(path, filename)`) to initiate the OS download dialog.
 
+
 ## Current Priorities (as of YYYY-MM-DD)
 *(To be updated by Lead Planner/User)*
 
 1.  Finalize planning for all sub-tasks of "Electron UI - Phase 2.5".
 2.  Formally approve plans for Agent F (Sub-Task 3) and Agent G (Sub-Task 4).
 3.  Begin (simulated) implementation of Phase 2.5 sub-tasks, prioritizing Agent D (Backend), then Agent G (IPC), then Agent F (UI).
+
 
 ## Feature/Phase Status
 
@@ -34,6 +36,8 @@ This document tracks the overall development status, current priorities, feature
     *   Sub-Task 2 (Agent E - Task Definition & Agent Selection UI): Detailed plan and simulated implementation design **archived (granularly)**. `tasks/agent_E.md` is clear.
     *   Sub-Task 3 (Agent F - Results Preview & Finalization UI): Detailed plan (revised for summaries, code view, zip) **complete** in `tasks/agent_F.md` (Status: "Planning Complete"). Awaiting final approval.
     *   Sub-Task 4 (Agent G - IPC Interface Implementation): Detailed plan **complete** in `tasks/agent_G.md` (Status: "Planning Complete"). Awaiting final approval. Includes new IPCs for file content & zipping.
+
+
 
 ## Integration Points & Dependencies
 
@@ -53,6 +57,7 @@ This section tracks key interfaces, modules, or data contracts that span across 
 | **IPC Channel: `'get-agent-file-content'` (New)** | Fetches content of a specific file for an agent task.                     | Agent G (Sub-Task 4)     | Agent F (Sub-Task 3)             | Planning Complete (Agent G) | Args `{ runId, agentId, filePath }`. Returns `{ success, content?, error? }`. Backend by Agent D. |
 | **IPC Channel: `'trigger-agent-version-zip'`** | UI requests a zip of an agent's branch content.                           | Agent G (Sub-Task 4)     | Agent F (Sub-Task 3)             | Planning Complete (Agent G) | Returns `{ success, downloadPath?, filename?, error? }`. Renderer then calls `requestFileDownload`. Backend zipping by Agent D. |
 | **Electron Utility: `requestFileDownload` (New)** | Main process utility to trigger OS download dialog for a given temp path. | General Main Process (Could be Agent G) | Agent F (Sub-Task 3 UI) | Definition Confirmed; Pending Implementation | Exposed via `preload.js` (e.g., `window.electron.requestFileDownload(path, filename)`). Handles temp file cleanup. |
+
 
 *(Add more rows as new integration points are identified)*
 

@@ -21,6 +21,7 @@ Ensure robust and correct implementation of all client-side (renderer, via `prel
 2.  **Implement Main-to-Renderer Event Listeners (expose via `contextBridge` in `preload.js`, ensure `main.js` uses `webContents.send`):**
     *   `window.api.onParallelGitTaskUpdate(callback)`: "Completed" status payload from this should include `solutionSummary` (string) and `keyFilePaths` (array of strings).
     *   `window.api.onParallelGitRunCompleted(callback)`
+
 3.  **Implement Listener Cleanup:** `window.api.cleanupParallelTaskListeners()`.
 4.  **Data Validation & Error Handling:** For all IPC payloads and communication.
 
