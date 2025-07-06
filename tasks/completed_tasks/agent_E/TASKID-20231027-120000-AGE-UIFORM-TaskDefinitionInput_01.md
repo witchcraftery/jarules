@@ -22,3 +22,7 @@
 *   **Styling:** Basic scoped CSS for the component.
 *   **Status:** This component's design and simulated implementation are complete.
 ---
+
+---
+**Verification Steps / Simulated Tests (Retroactively Added):**
+*(Agent E would have defined how to verify this component's/logic's design against acceptance criteria. E.g., "1. Confirm props and emits match parent component's needs. 2. Verify `v-model` logic is correctly described. 3. Simulate IPC call and check expected payload/response structure.")*

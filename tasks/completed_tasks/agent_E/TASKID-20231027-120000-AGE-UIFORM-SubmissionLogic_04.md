@@ -33,3 +33,7 @@
     *   Enhanced `feedbackMessage` display with dynamic classes for success, error, info, warning alerts.
 *   **Status:** UI logic for task submission is designed. Depends on Agent G for IPC channel (`'start-parallel-git-task'`) implementation and Agent D's backend (`parallelTaskManager.js`) to process the request.
 ---
+
+---
+**Verification Steps / Simulated Tests (Retroactively Added):**
+*(Agent E would have defined how to verify this component's/logic's design against acceptance criteria. E.g., "1. Confirm props and emits match parent component's needs. 2. Verify `v-model` logic is correctly described. 3. Simulate IPC call and check expected payload/response structure.")*

@@ -13,3 +13,7 @@ The simulated implementation of all Vue.js components (`TaskDefinitionInput.vue`
 
 All UI-side logic and component structure designs are documented above.
 ---
+
+---
+**Verification Steps / Simulated Tests (Retroactively Added):**
+*(Agent E would have defined how to verify this component's/logic's design against acceptance criteria. E.g., "1. Confirm props and emits match parent component's needs. 2. Verify `v-model` logic is correctly described. 3. Simulate IPC call and check expected payload/response structure.")*

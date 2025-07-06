@@ -48,40 +48,28 @@ export default {
       try {
         const result = await window.api.getConfig();
 
-        // Check if the result itself is an error object (from main.js)
-        if (result && typeof result === 'object' && result.error) {
+        if (result && result.error) {
           console.error('Error from main process getConfig:', result.message, result.details);
-          const details = result.details || result.message || 'Unknown error from backend.';
-          this.error = `Error loading LLM configurations: Could not read 'llm_config.yaml'. File system or permission issue. Details: ${details}`;
+          this.error = `Failed to retrieve configuration from the backend. Details: ${result.message}${result.details ? ' - ' + result.details : ''}`;
           this.isLoading = false;
           return;
         }
 
-        // Expecting result to be a string (YAML content) if no error object was returned
         const yamlString = result;
-        if (typeof yamlString === 'string') {
-          if (yamlString.trim() === '') {
-            this.error = "No configuration content found. The 'llm_config.yaml' file might be empty.";
-            this.configurationContent = {}; // Set to empty object to avoid issues with ConfigNodeViewer expecting an object
-          } else {
-            this.configurationContent = jsyaml.load(yamlString); // This can throw YAMLException
-          }
-        } else if (yamlString === null || yamlString === undefined) { // Explicitly check for null/undefined if main.js could return that
-            this.error = "No configuration data was returned from the backend. The 'llm_config.yaml' file might be missing or inaccessible.";
-        } else { // Fallback for unexpected types if main.js changes its return contract
+        if (yamlString && typeof yamlString === 'string') {
+          this.configurationContent = jsyaml.load(yamlString);
+        } else if (typeof yamlString === 'object' && yamlString !== null) {
+          this.configurationContent = yamlString; // Already parsed
+        } else if (!yamlString) { // Handles null or empty string from backend
+          this.error = 'No configuration content was returned from the backend. The configuration file might be empty or missing.';
+        }
+         else { // Fallback for unexpected types
           this.error = 'Failed to load configuration: Invalid or unexpected format received from backend.';
           console.warn('Unexpected configuration format:', yamlString);
         }
-      } catch (err) { // Catches errors from jsyaml.load() or if window.api.getConfig() itself throws
-        console.error('Error in fetchConfiguration (parsing or IPC invoke):', err);
-        if (err.name === 'YAMLException') {
-          this.error = `Error parsing LLM configurations: The 'llm_config.yaml' file has invalid YAML syntax. Details: ${err.message}`;
-        } else if (err.message && err.message.includes("Invocation error")) { // Error from ipcRenderer.invoke if main handler throws unhandled
-            this.error = `Error fetching configuration from backend: ${err.message}. Check main process logs.`;
-        }
-        else {
-          this.error = `An unexpected error occurred while processing configuration: ${err.message}.`;
-        }
+      } catch (err) { // Catches errors from jsyaml.load or other synchronous issues
+        console.error('Error parsing configuration YAML or other client-side issue:', err);
+        this.error = `Error processing configuration data: ${err.message}. Please check YAML syntax if the file was loaded.`;
       }
       this.isLoading = false;
     }

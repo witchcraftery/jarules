@@ -78,6 +78,8 @@ class OpenRouterConnector(BaseLLMConnector):
         if self.generation_params:
             logger.info(f"Default generation parameters: {self.generation_params}")
 
+import json # For potential JSON parsing errors
+
     async def _make_chat_completion_request(self, messages: List[Dict[str, str]], generation_params_override: Optional[Dict[str, Any]] = None) -> str:
         """
         Helper method to make a request to the /chat/completions endpoint.
@@ -136,58 +138,30 @@ class OpenRouterConnector(BaseLLMConnector):
             logger.error(f"An unexpected error occurred during OpenRouter request: {e}")
             raise OpenRouterApiError(f"An unexpected error occurred: {e}", underlying_exception=e) from e
 
-    def check_availability(self) -> Dict[str, Any]:
+
+    async def check_availability(self) -> bool:
         """
         Checks if the OpenRouter API is available by trying to make a cheap request.
         This also implicitly checks if the API key is valid.
-        This method is synchronous and runs the async check internally.
         """
         logger.info(f"Checking OpenRouter API availability and API key validity at {self.api_base_url} using model {self.model_name}...")
-
-        async def _async_check():
-            test_messages = [{"role": "user", "content": "test"}]
-            test_gen_params = {"max_tokens": 1, "temperature": 0.0}
-            await self._make_chat_completion_request(messages=test_messages, generation_params_override=test_gen_params)
-
         try:
-            # Similar to ClaudeConnector, manage running async code from sync context
-            try:
-                loop = asyncio.get_running_loop()
-                # This check might be too simplistic for all async environments.
-                # Consider if a more robust async-to-sync execution utility is needed for the project.
-            except RuntimeError: # No running event loop
-                loop = None
+            test_messages = [{"role": "user", "content": "test"}]
+            # Use minimal generation params for this test call to make it cheap and fast
+            test_gen_params = {"max_tokens": 1, "temperature": 0.0}
 
-            if loop and loop.is_running():
-                # This is a tricky situation. Calling asyncio.run() from a running loop is an error.
-                # A proper solution would involve `asyncio.create_task` and awaiting it if possible,
-                # or using a thread pool to run the async code if truly blocking sync is required.
-                # For now, returning an error indicating this specific state.
-                logger.warning("check_availability (sync) called from within an active asyncio event loop. This can cause issues.")
-                # As a temporary measure, we'll try to run it, but this is not ideal.
-                # The user might need to call an async version if they are in an async context.
-                # Or the connector needs a truly synchronous HTTP client for this method.
-                # For this exercise, we stick to asyncio.run and document the limitation.
-                pass # Fall through to asyncio.run
-
-            asyncio.run(_async_check())
+            await self._make_chat_completion_request(messages=test_messages, generation_params_override=test_gen_params)
             logger.info("OpenRouter API is available and API key appears valid.")
-            return {'available': True, 'details': 'OpenRouter API is available and authentication is successful.'}
-        except OpenRouterApiError as e:
-            details = f"OpenRouter API error: {e.message}"
-            if e.status_code:
-                details += f" (Status: {e.status_code})"
+            return True
+        except OpenRouterApiError as e: # Catch our specific error from _make_chat_completion_request
             if e.status_code == 401:
-                logger.error(f"OpenRouter API key is invalid or not authorized. Status: {e.status_code}. Message: {e.message}")
-                details = f"OpenRouter API authentication failed (Status: {e.status_code}): {e.message}. Check API key."
+                logger.error(f"OpenRouter API key is invalid or not authorized. Status: {e.status_code}. Message: {e}")
             else:
-                logger.error(f"OpenRouter API availability check failed. Status: {e.status_code}. Message: {e.message}")
-            return {'available': False, 'details': details}
-        except Exception as e: # Catch any other unexpected errors, including asyncio.run issues
+                logger.error(f"OpenRouter API availability check failed. Status: {e.status_code}. Message: {e}")
+            return False
+        except Exception as e: # Catch any other unexpected errors
             logger.error(f"An unexpected error occurred during OpenRouter availability check: {e}")
-            if "asyncio.run() cannot be called from a running event loop" in str(e):
-                 return {'available': False, 'details': "OpenRouter availability check failed: Cannot run async check from current event loop context. This connector is async but check is sync."}
-            return {'available': False, 'details': f"An unexpected error occurred: {e}"}
+            return False
 
     def _prepare_messages(self, user_prompt: str, system_instruction: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, str]]:
         """
@@ -306,71 +280,38 @@ if __name__ == '__main__':
 
     # This requires OPENROUTER_API_KEY to be set in the environment
     # And a valid referer if your OpenRouter account requires it.
+    sample_config = {
+        "api_key_env_var": "OPENROUTER_API_KEY",
+        "model_name": "mistralai/mistral-7b-instruct", # A common free model
+        "http_referer": "YOUR_SITE_URL_HERE", # Replace with your actual site URL or test name
+        "default_system_prompt": "You are a helpful coding assistant.",
+        "generation_params": {"temperature": 0.7, "max_tokens": 100}
+    }
 
-    async def main_async_tests():
-        connector = None
+    async def main():
         try:
-            connector = OpenRouterConnector(
-                model_name="mistralai/mistral-7b-instruct",
-                api_key_env_var="OPENROUTER_API_KEY",
-                http_referer=os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:3001/test"), # Use env var or a default
-                default_system_prompt="You are a helpful coding assistant.",
-                generation_params={"temperature": 0.7, "max_tokens": 100}
-            )
-            logger.info("OpenRouterConnector (for async tests) created.")
+            connector = OpenRouterConnector(config=sample_config)
+            logger.info("Connector created.")
 
-            # Example: Test generate_code
+            # Test check_availability (placeholder)
+            available = await connector.check_availability()
+            logger.info(f"Availability: {available}")
+
+            # Test generate_code (placeholder)
             # code = await connector.generate_code("Write a python function to add two numbers.")
-            # logger.info(f"Generated code: {code}")
+            # logger.info(f"Generated code (placeholder): {code}")
 
-        except OpenRouterApiError as e:
-            logger.error(f"OpenRouter API error during async example: {e}")
+        except ValueError as e:
+            logger.error(f"Configuration error: {e}")
         except Exception as e:
-            logger.error(f"An error occurred during async example: {e}", exc_info=True)
+            logger.error(f"An error occurred: {e}", exc_info=True)
         finally:
-            if connector:
+            if 'connector' in locals() and connector:
                 await connector.close()
 
-    def test_sync_check_availability():
-        connector = None
-        try:
-            # Ensure you have OPENROUTER_HTTP_REFERER in env or change the default
-            http_referer = os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:3002/test_sync")
-            if http_referer == "YOUR_SITE_URL_HERE" or not http_referer: # Default from old example
-                 logger.warning("OPENROUTER_HTTP_REFERER not set to a valid URL, using placeholder for sync test.")
-                 http_referer = "http://localhost:3000/sync_check_test"
-
-
-            connector = OpenRouterConnector(
-                model_name="mistralai/mistral-7b-instruct",
-                api_key_env_var="OPENROUTER_API_KEY",
-                http_referer=http_referer,
-                default_system_prompt="You are a helpful coding assistant for sync check.",
-                generation_params={"temperature": 0.7, "max_tokens": 50}
-            )
-            logger.info("OpenRouterConnector (for sync check_availability) created.")
-
-            availability_status = connector.check_availability()
-            logger.info(f"OpenRouter API Availability: {availability_status['available']}, Details: {availability_status['details']}")
-
-        except OpenRouterApiError as e: # Catch init errors
-            logger.error(f"OpenRouter API error during sync example init: {e}")
-            logger.info(f"OpenRouter API Availability: False, Details: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during sync example: {e}", exc_info=True)
-            logger.info(f"OpenRouter API Availability: False, Details: An unexpected error occurred: {e}")
-        # No explicit close here for sync test, similar to Claude connector.
-
-    if os.getenv("OPENROUTER_API_KEY"):
-        # It's good practice to ensure http_referer is actually set if required by your key
-        configured_referer = os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:3000/main_test")
-        if configured_referer == "YOUR_SITE_URL_HERE" or not configured_referer :
-             logger.warning("OPENROUTER_HTTP_REFERER is not set to a specific value. OpenRouter may require this.")
-
-        logger.info("--- Running Sync check_availability test for OpenRouter ---")
-        test_sync_check_availability()
-
-        # logger.info("\n--- Running Async operations test for OpenRouter (commented out) ---")
-        # asyncio.run(main_async_tests())
+    if os.getenv("OPENROUTER_API_KEY") and sample_config["http_referer"] != "YOUR_SITE_URL_HERE":
+        asyncio.run(main())
     else:
-        logger.warning("Skipping OpenRouterConnector example: OPENROUTER_API_KEY not set.")
+        logger.warning("Skipping example usage: OPENROUTER_API_KEY not set or http_referer not configured.")
+        logger.warning("To run this example, set OPENROUTER_API_KEY environment variable and update http_referer in sample_config.")
+        logger.warning("Example: export OPENROUTER_API_KEY='your_api_key_here'")
