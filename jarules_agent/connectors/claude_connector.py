@@ -169,50 +169,25 @@ class ClaudeConnector(BaseLLMConnector):
             raise ClaudeApiError(f"An unexpected error occurred: {e}", error_type="unexpected_error", underlying_exception=e) from e
 
 
-    def check_availability(self) -> Dict[str, Any]:
+    async def check_availability(self) -> bool:
         """
         Checks if the Claude API is available and the API key is valid.
         Makes a simple, low-cost API call.
-        This method is synchronous to align with the base class, and runs the async check internally.
         """
         logger.info("Checking Claude API availability...")
-
-        async def _async_check():
-            # This is the original async logic
-            test_messages = [{"role": "user", "content": "ping"}]
-            await self._create_message(messages=test_messages, generation_params_override={"max_tokens": 5})
-
         try:
-            # Run the internal async check function
-            # If an event loop is already running (e.g., in a Jupyter notebook or other async app),
-            # asyncio.run() cannot be used directly. We need to handle this.
-            try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    # If loop is running, create a task and run it. This is complex.
-                    # For simplicity in this context, let's assume if we are in an async context already,
-                    # this method should have been async. The requirement is to make it sync.
-                    # So, we'll use asyncio.run, which creates its own event loop.
-                    # This might fail if called from an already running asyncio event loop.
-                    # A more robust solution might involve a helper that manages how to run async code.
-                    # For now, we'll proceed with asyncio.run() and acknowledge this limitation.
-                    pass # Fall through to asyncio.run() for now, or consider a more complex solution if issues arise.
-            except RuntimeError: # No running event loop
-                pass # asyncio.run() will create a new one.
-
-            asyncio.run(_async_check())
+            test_messages = [{"role": "user", "content": "ping"}]
+            # Use minimal max_tokens for this check
+            await self._create_message(messages=test_messages, generation_params_override={"max_tokens": 5})
             logger.info("Claude API is available and key is valid.")
-            return {'available': True, 'details': 'Claude API is available and authentication is successful.'}
-
+            return True
         except ClaudeApiError as e:
             logger.error(f"Claude API availability check failed: {e.message} (Type: {e.error_type}, Status: {e.status_code})")
-            return {'available': False, 'details': f"Claude API error: {e.message} (Type: {e.error_type}, Status: {e.status_code})"}
-        except Exception as e: # Catch any other unexpected errors, including issues with asyncio.run()
+            return False
+        except Exception as e: # Should be caught by ClaudeApiError but as a safeguard
             logger.error(f"Unexpected error during Claude availability check: {e}")
-            # This might include "asyncio.run() cannot be called from a running event loop"
-            if "asyncio.run() cannot be called from a running event loop" in str(e):
-                return {'available': False, 'details': "Claude availability check failed: Cannot run async check from current event loop context. This connector is async but check is sync."}
-            return {'available': False, 'details': f"An unexpected error occurred: {e}"}
+            return False
+
 
     async def generate_code(self, user_prompt: str, system_instruction: str = None, context: str = "") -> str:
         """
@@ -280,73 +255,40 @@ if __name__ == '__main__':
     import asyncio
 
     # This requires ANTHROPIC_API_KEY to be set in the environment.
-    # The old config style `connector = ClaudeConnector(config=sample_config)` is no longer valid
-    # with BaseLLMConnector expecting model_name and then **kwargs.
-    # Let's adjust the example.
+    sample_config = {
+        "api_key_env_var": "ANTHROPIC_API_KEY", # Ensure this env var is set
+        "model_name": "claude-3-haiku-20240307", # Use a cheaper model for testing
+        "max_tokens": 150,
+        "default_system_prompt": "You are a concise coding assistant.",
+        "anthropic_version_header": "2023-06-01" # Example header
+    }
 
-    async def main_async_tests():
-        connector = None
+    async def main():
+        connector = None # Ensure connector is defined for finally block
         try:
-            # Initialize with model_name and other params as kwargs
-            connector = ClaudeConnector(
-                model_name="claude-3-haiku-20240307",
-                api_key_env_var="ANTHROPIC_API_KEY", # This is used by __init__ to find the key
-                max_tokens=150,
-                default_system_prompt="You are a concise coding assistant.",
-                anthropic_version_header="2023-06-01"
-            )
-            logger.info("ClaudeConnector (async context for other methods) created.")
+            connector = ClaudeConnector(config=sample_config)
+            logger.info("ClaudeConnector created.")
 
-            # The other methods like generate_code are async.
-            # Example: Test generate_code
+            available = await connector.check_availability() # Placeholder
+            logger.info(f"Availability (placeholder): {available}")
+
+            # Example: Test generate_code (placeholder)
             # code_response = await connector.generate_code("Write a simple Python 'hello world' function.")
-            # logger.info(f"Generated code: {code_response}")
+            # logger.info(f"Generated code (placeholder): {code_response}")
 
-        except ValueError as e: # Should be LLMConnectorError or ClaudeApiError now
+        except ValueError as e:
             logger.error(f"Configuration error: {e}")
         except ClaudeApiError as e:
             logger.error(f"Claude API error during example: {e}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred during async example: {e}", exc_info=True)
+            logger.error(f"An unexpected error occurred during example: {e}", exc_info=True)
         finally:
             if connector:
                 await connector.close()
 
-    def test_sync_check_availability():
-        connector = None
-        try:
-            connector = ClaudeConnector(
-                model_name="claude-3-haiku-20240307",
-                api_key_env_var="ANTHROPIC_API_KEY",
-                max_tokens=150,
-                default_system_prompt="You are a concise coding assistant.",
-                anthropic_version_header="2023-06-01"
-            )
-            logger.info("ClaudeConnector (for sync check_availability) created.")
-
-            # Test the synchronous check_availability
-            availability_status = connector.check_availability()
-            logger.info(f"Claude API Availability: {availability_status['available']}, Details: {availability_status['details']}")
-
-        except ClaudeApiError as e: # Catch init errors
-            logger.error(f"Claude API error during sync example init: {e}")
-            # Print availability for init failures too
-            logger.info(f"Claude API Availability: False, Details: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during sync example: {e}", exc_info=True)
-            logger.info(f"Claude API Availability: False, Details: An unexpected error occurred: {e}")
-        # No async close needed here if only sync method was called and client wasn't used extensively in async way.
-        # However, if __init__ fully initializes an async client, it should be closed.
-        # This example structure is tricky due to mixed async/sync.
-        # For a robust solution, the client itself would need separate sync/async versions or a sync wrapper.
-        # For now, we assume the test_sync_check_availability does not require explicit close if it errors out early,
-        # or that main_async_tests would handle closure if it were run.
-
     if os.getenv("ANTHROPIC_API_KEY"):
-        logger.info("--- Running Sync check_availability test ---")
-        test_sync_check_availability()
-
-        # logger.info("\n--- Running Async operations test (commented out by default) ---")
-        # asyncio.run(main_async_tests()) # Uncomment to run async parts
+        asyncio.run(main())
     else:
         logger.warning("Skipping ClaudeConnector example: ANTHROPIC_API_KEY not set.")
+        logger.warning("To run this example, set the ANTHROPIC_API_KEY environment variable.")
+        logger.warning("Example: export ANTHROPIC_API_KEY='your_anthropic_api_key_here'")

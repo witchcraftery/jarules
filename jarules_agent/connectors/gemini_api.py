@@ -107,52 +107,6 @@ class GeminiClient(BaseLLMConnector):
         except Exception as e:
             raise GeminiClientError(f"Failed to initialize Gemini model '{self.model_name}': {e}", underlying_exception=e)
 
-    def check_availability(self) -> Dict[str, Any]:
-        """
-        Checks the availability and status of the Google Gemini API.
-
-        Makes a lightweight call to list models to verify connectivity and authentication.
-
-        Returns:
-            A dictionary with keys 'available' (bool) and 'details' (str).
-            Example: {'available': True, 'details': 'Gemini API is available and authentication is successful.'}
-                     {'available': False, 'details': 'Error message...'}
-        """
-        if not self.api_key: # Should have been caught by __init__, but as a safeguard
-            return {'available': False, 'details': 'Gemini API key is not configured in the client.'}
-
-        try:
-            # Ensure genai is configured for this instance check, though it's done in __init__
-            # This is more of a double check if the instance is long-lived and something changed.
-            # However, genai.configure is global, so __init__ should suffice.
-            # The most direct check is to try a lightweight API call.
-
-            models = genai.list_models()
-            # Check if we actually got a list of models and specific model types we might expect
-            # For example, check if any model has 'generateContent' in its supported_generation_methods
-            can_generate = any('generateContent' in model.supported_generation_methods for model in models)
-
-            if models and can_generate:
-                return {'available': True, 'details': 'Gemini API is available and authentication is successful. Found usable models.'}
-            elif models:
-                return {'available': False, 'details': 'Gemini API is responding but no models suitable for content generation were found.'}
-            else: # Should not happen if list_models() succeeded without error and returned empty
-                return {'available': False, 'details': 'Gemini API is responding but returned an empty list of models.'}
-
-        except google_exceptions.Unauthenticated as e:
-            return {'available': False, 'details': f"Gemini API authentication failed: {e}. Please check your API key."}
-        except google_exceptions.PermissionDenied as e:
-            return {'available': False, 'details': f"Gemini API permission denied: {e}. The API key may not have the necessary permissions or the API may not be enabled in your Google Cloud project."}
-        except google_exceptions.ResourceExhausted as e:
-            # This could indicate quota issues, which means the API is available but not usable for this request.
-            return {'available': False, 'details': f"Gemini API quota likely exceeded: {e}"}
-        except google_exceptions.GoogleAPIError as e: # Catch other Google API errors
-            return {'available': False, 'details': f"Gemini API error: {e}"}
-        except GeminiApiKeyError as e: # Should be caught in __init__
-             return {'available': False, 'details': f"Gemini API Key Error: {e}"}
-        except Exception as e: # Catch any other unexpected errors (e.g., network issues not caught by GoogleAPIError)
-            return {'available': False, 'details': f"An unexpected error occurred while checking Gemini API availability: {e}"}
-
     def _generate_content_raw(self, prompt_parts: List[Any], method_generation_config: Optional[genai.types.GenerationConfig] = None, safety_settings: Optional[List[Dict]] = None, **kwargs: Any) -> genai.types.GenerateContentResponse:
         """
         Private helper to make a raw call to the Gemini API's generate_content.

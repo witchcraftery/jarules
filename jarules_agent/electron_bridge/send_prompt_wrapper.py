@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import signal # Added signal
 import argparse
 import asyncio
 from pathlib import Path # Added pathlib
@@ -12,21 +11,6 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-# --- Stop Generation Signal Handling ---
-STOP_GENERATION_FLAG = False
-
-def handle_stop_signal(signum, frame):
-    """Sets the stop generation flag when SIGUSR1 is received."""
-    global STOP_GENERATION_FLAG
-    STOP_GENERATION_FLAG = True
-    # Optional: print a debug message to stderr to confirm signal reception
-    print(json.dumps({"type": "debug", "message": "Stop signal received, attempting to halt generation."}), file=sys.stderr)
-    sys.stderr.flush()
-
-# Register the signal handler for SIGUSR1
-signal.signal(signal.SIGUSR1, handle_stop_signal)
-# --- End Stop Generation Signal Handling ---
 
 try:
     from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMManagerError
@@ -139,37 +123,17 @@ async def send_prompt_to_llm_streaming(prompt: str, provider_id: str):
             words = ["This", "is", "a", "streamed", "response", "reflecting", "potential", "history", "use."]
             full_response_text = ""
             for word in words:
-                if STOP_GENERATION_FLAG:
-                    break
                 chunk_text = f"{word} "
                 full_response_text += chunk_text
                 print(json.dumps({"type": "chunk", "token": chunk_text}))
                 sys.stdout.flush()
                 time.sleep(0.05)
-
-            if STOP_GENERATION_FLAG:
-                print(json.dumps({"type": "done", "cancelled": True, "message": "Generation stopped by user"}))
-                sys.stdout.flush()
-                return # Exit after sending cancelled message
-            else:
-                print(json.dumps({"type": "done", "full_response": full_response_text.strip()}))
-                sys.stdout.flush()
+            print(json.dumps({"type": "done", "full_response": full_response_text.strip()}))
+            sys.stdout.flush()
         else:
-            # Check before starting generation for other clients
-            if STOP_GENERATION_FLAG:
-                print(json.dumps({"type": "done", "cancelled": True, "message": "Generation stopped by user before starting"}))
-                sys.stdout.flush()
-                return
-
             llm_client = manager.get_llm_client(provider_id=provider_id)
             # Pass the loaded_history to generate_code
             response_text = await llm_client.generate_code(prompt, history=loaded_history)
-
-            # Check if stop was signalled during llm_client.generate_code
-            if STOP_GENERATION_FLAG:
-                print(json.dumps({"type": "done", "cancelled": True, "message": "Generation stopped by user during LLM call"}))
-                sys.stdout.flush()
-                return
 
             if response_text is None: # Handle cases where connector might return None (e.g. safety block)
                 print(json.dumps({"type": "error", "message": "LLM did not return a response.", "details": "The response from the LLM client was None."}))
