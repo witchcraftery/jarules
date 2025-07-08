@@ -266,7 +266,7 @@ if __name__ == '__main__':
     async def main():
         connector = None # Ensure connector is defined for finally block
         try:
-            connector = ClaudeConnector(config=sample_config)
+            connector = ClaudeConnector(**sample_config)
             logger.info("ClaudeConnector created.")
 
             available = await connector.check_availability() # Placeholder
