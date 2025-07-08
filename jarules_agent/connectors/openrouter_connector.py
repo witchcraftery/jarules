@@ -290,7 +290,7 @@ if __name__ == '__main__':
 
     async def main():
         try:
-            connector = OpenRouterConnector(config=sample_config)
+            connector = OpenRouterConnector(**sample_config)
             logger.info("Connector created.")
 
             # Test check_availability (placeholder)
