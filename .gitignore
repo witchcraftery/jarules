@@ -6,6 +6,7 @@
 .env.production
 .env.test
 *.env
+*.local
 
 # API Keys and tokens (just in case)
 *_api_key*
