@@ -1,6 +1,6 @@
 # JaRules - Your Async Development Agent 🤖
 
-![JaRules Asynchronous Development Assistant](https://raw.githubusercontent.com/witchcraftery/jarules/main/jarules_title-card.jpg)
+![JaRules Asynchronous Development Assistant](https://raw.githubusercontent.com/witchcraftery/jarules/main/jarules_title-card_b.png)
 
 ## Overview
 
