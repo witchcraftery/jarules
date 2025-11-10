@@ -125,13 +125,6 @@
     <div v-if="showDiagnosticsPanel" class="diagnostics-section-wrapper">
       <DiagnosticsPanel />
     </div>
-
-    <ResultDetailsModal
-      v-if="selectedAgentForModal"
-      :agent="selectedAgentForModal"
-      :runId="activeParallelRun.runId"
-      @close="selectedAgentForModal = null"
-    />
   </div>
 </template>
 
@@ -144,7 +137,6 @@ import TaskDefinitionInput from './components/TaskDefinitionInput.vue';
 import SubAgentSelector from './components/SubAgentSelector.vue';
 import ParallelTaskDisplay from './components/ParallelTaskDisplay.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
-import ResultDetailsModal from './components/ResultDetailsModal.vue';
 
 
 const message = ref('Hello from JaRules (Electron + Vue.js + Vite!)');
@@ -165,7 +157,6 @@ const isLoadingClearHistory = ref(false);
 const currentTaskDescription = ref('');
 const selectedAgentsForTask = ref([]); // Array of agent objects
 const activeParallelRun = ref(null); // Will hold data for ParallelTaskDisplay
-const selectedAgentForModal = ref(null);
 // Example: { runId: 'run-xyz', taskDescription: '...', agents: [ {id: '...', name: '...', status: 'Pending'} ] }
 const showParallelProcessingUI = ref(false); // To toggle visibility of the parallel processing section
 const showDiagnosticsPanel = ref(false); // Initially hidden
@@ -599,7 +590,8 @@ async function startParallelTask() {
 // Methods to handle events from ParallelTaskDisplay
 function handleViewFullResult(agentTask) {
   console.log('App.vue: View Full Result for', agentTask);
-  selectedAgentForModal.value = agentTask;
+  // Implement logic to show detailed results, perhaps a modal
+  alert(`App.vue: Viewing full result for ${agentTask.name}. Data: ${JSON.stringify(agentTask)}`);
 }
 
 async function handleFinalizeSelection(selectedAgentId) {
