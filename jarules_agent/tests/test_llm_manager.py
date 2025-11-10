@@ -4,11 +4,13 @@ import unittest
 from unittest.mock import patch, mock_open, MagicMock
 import os
 import yaml
+import json
+from pathlib import Path
 
 import logging # For suppressing logger output during tests if needed
 
 # Adjust imports based on actual project structure
-from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError
+from jarules_agent.core.llm_manager import LLMManager, LLMConfigError, LLMProviderNotImplementedError, LLMManagerError
 from jarules_agent.connectors.gemini_api import GeminiClient, GeminiApiKeyError
 from jarules_agent.connectors.ollama_connector import OllamaConnector # Import other connectors
 from jarules_agent.connectors.openrouter_connector import OpenRouterConnector
@@ -221,9 +223,6 @@ class TestLLMManager(unittest.TestCase):
         manager = LLMManager(config_path="dummy.yaml")
         with self.assertRaisesRegex(LLMConfigError, "LLM configuration with id 'non_existent_id' not found or not enabled."):
             manager.get_llm_client("non_existent_id")
-
-import json
-from pathlib import Path
 
     @patch('os.path.exists')
     @patch('builtins.open')
