@@ -1,14 +1,14 @@
 import logging
 import os
 import httpx
+import json
+from typing import Optional, List, Dict, Any
 
-from typing import Optional, List, Dict, Any # Added Optional, List, Dict, Any
 from jarules_agent.connectors.base_llm_connector import BaseLLMConnector, LLMConnectorError
 
 logger = logging.getLogger(__name__)
 
-# Define a custom exception for OpenRouter API errors
-class OpenRouterApiError(LLMConnectorError): # Inherit from LLMConnectorError
+class OpenRouterApiError(LLMConnectorError):
     """Custom exception for OpenRouter API errors."""
     def __init__(self, message, status_code=None, underlying_exception: Optional[Exception] = None):
         super().__init__(message, underlying_exception=underlying_exception)
@@ -22,23 +22,7 @@ class OpenRouterConnector(BaseLLMConnector):
     DEFAULT_API_BASE_URL = "https://openrouter.ai/api/v1"
     DEFAULT_MODEL_NAME = "gryphe/mythomax-l2-13b" # A free model for default
 
-    def __init__(self, model_name: Optional[str] = None, **kwargs: Any): # Updated signature
-        """
-        Initializes the OpenRouterConnector.
-
-        Args:
-            model_name: Optional. The default model to use (e.g., "openai/gpt-4o").
-            **kwargs: Configuration parameters.
-                      Expected keys in kwargs:
-                      - 'api_key_env_var' (str): Name of the environment variable holding the API key.
-                                                 Defaults to "OPENROUTER_API_KEY".
-                      - 'api_base_url' (str, optional): Base URL for the OpenRouter API.
-                                                        Defaults to "https://openrouter.ai/api/v1".
-                      - 'default_system_prompt' (str, optional): Default system prompt.
-                      - 'generation_params' (dict, optional): Default generation parameters.
-                      - 'request_timeout' (int, optional): Timeout for HTTP requests. Defaults to 60.
-                      - 'http_referer' (str, optional): HTTP Referer header. Defaults to "http://localhost:3000".
-        """
+    def __init__(self, model_name: Optional[str] = None, **kwargs: Any):
         effective_model_name = model_name or kwargs.get("model_name") or self.DEFAULT_MODEL_NAME
         super().__init__(model_name=effective_model_name, **kwargs)
 
@@ -53,8 +37,8 @@ class OpenRouterConnector(BaseLLMConnector):
 
         self.default_system_prompt = self._config.get("default_system_prompt")
         self.generation_params = self._config.get("generation_params", {})
-        self.http_referer = self._config.get("http_referer", "http://localhost:3000") # Example referer
-        request_timeout = self._config.get("request_timeout", 60) # OpenRouter can sometimes be slow
+        self.http_referer = self._config.get("http_referer", "http://localhost:3000")
+        request_timeout = self._config.get("request_timeout", 60)
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -62,7 +46,6 @@ class OpenRouterConnector(BaseLLMConnector):
         }
         if self.http_referer:
             headers["HTTP-Referer"] = self.http_referer
-        # Potentially add "X-Title" header with app name if desired
 
         self.client = httpx.AsyncClient(
             base_url=self.api_base_url,
@@ -78,32 +61,27 @@ class OpenRouterConnector(BaseLLMConnector):
         if self.generation_params:
             logger.info(f"Default generation parameters: {self.generation_params}")
 
-import json # For potential JSON parsing errors
-
     async def _make_chat_completion_request(self, messages: List[Dict[str, str]], generation_params_override: Optional[Dict[str, Any]] = None) -> str:
         """
         Helper method to make a request to the /chat/completions endpoint.
         """
         payload = {
-            "model": self.model_name, # self.model_name is from BaseLLMConnector
+            "model": self.model_name,
             "messages": messages,
         }
 
-        # Merge default generation_params with overrides, then with payload
         current_generation_params = self.generation_params.copy()
         if generation_params_override:
             current_generation_params.update(generation_params_override)
 
-        # Only add parameters to payload if they have values, to avoid sending e.g. "temperature": null
         for key, value in current_generation_params.items():
             if value is not None:
                 payload[key] = value
-        # payload.update(current_generation_params) # Old way, could send None values
 
         logger.debug(f"OpenRouter request payload: {json.dumps(payload, indent=2)}")
         try:
             response = await self.client.post("/chat/completions", json=payload)
-            response.raise_for_status()  # Raises HTTPStatusError for 4xx/5xx responses
+            response.raise_for_status()
 
             response_data = response.json()
 
@@ -114,7 +92,7 @@ import json # For potential JSON parsing errors
 
             content = response_data["choices"][0]["message"]["content"]
             logger.info(f"Successfully received response from OpenRouter. Choice 0 content length: {len(content or '')}")
-            return (content or "").strip() # Ensure content is not None before strip
+            return (content or "").strip()
 
         except httpx.RequestError as e:
             logger.error(f"Error connecting to OpenRouter API: {e}")
@@ -124,21 +102,19 @@ import json # For potential JSON parsing errors
             error_detail = e.response.text
             try:
                 error_json = e.response.json()
-                if error_json and "error" in error_json: # OpenAI compatible error
+                if error_json and "error" in error_json:
                     error_detail = error_json["error"].get("message", error_detail)
-                elif error_json and "detail" in error_json: # Some other proxy errors
+                elif error_json and "detail" in error_json:
                     error_detail = error_json["detail"]
             except json.JSONDecodeError:
                 pass
             raise OpenRouterApiError(f"OpenRouter API error: {e.response.status_code} - {error_detail}", status_code=e.response.status_code, underlying_exception=e) from e
-        except json.JSONDecodeError as e: # Should be rare if HTTPStatusError parsing works
+        except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response from OpenRouter: {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
             raise OpenRouterApiError(f"Invalid JSON response from OpenRouter: {e}", underlying_exception=e) from e
-        except Exception as e: # Catch-all for unexpected errors
+        except Exception as e:
             logger.error(f"An unexpected error occurred during OpenRouter request: {e}")
             raise OpenRouterApiError(f"An unexpected error occurred: {e}", underlying_exception=e) from e
-
-
     async def check_availability(self) -> bool:
         """
         Checks if the OpenRouter API is available by trying to make a cheap request.
@@ -273,45 +249,3 @@ import json # For potential JSON parsing errors
         if hasattr(self, 'client') and self.client:
             await self.client.aclose()
             logger.info("OpenRouterConnector's HTTP client closed.")
-
-# Example usage (for testing purposes, if run directly)
-if __name__ == '__main__':
-    import asyncio
-
-    # This requires OPENROUTER_API_KEY to be set in the environment
-    # And a valid referer if your OpenRouter account requires it.
-    sample_config = {
-        "api_key_env_var": "OPENROUTER_API_KEY",
-        "model_name": "mistralai/mistral-7b-instruct", # A common free model
-        "http_referer": "YOUR_SITE_URL_HERE", # Replace with your actual site URL or test name
-        "default_system_prompt": "You are a helpful coding assistant.",
-        "generation_params": {"temperature": 0.7, "max_tokens": 100}
-    }
-
-    async def main():
-        try:
-            connector = OpenRouterConnector(**sample_config)
-            logger.info("Connector created.")
-
-            # Test check_availability (placeholder)
-            available = await connector.check_availability()
-            logger.info(f"Availability: {available}")
-
-            # Test generate_code (placeholder)
-            # code = await connector.generate_code("Write a python function to add two numbers.")
-            # logger.info(f"Generated code (placeholder): {code}")
-
-        except ValueError as e:
-            logger.error(f"Configuration error: {e}")
-        except Exception as e:
-            logger.error(f"An error occurred: {e}", exc_info=True)
-        finally:
-            if 'connector' in locals() and connector:
-                await connector.close()
-
-    if os.getenv("OPENROUTER_API_KEY") and sample_config["http_referer"] != "YOUR_SITE_URL_HERE":
-        asyncio.run(main())
-    else:
-        logger.warning("Skipping example usage: OPENROUTER_API_KEY not set or http_referer not configured.")
-        logger.warning("To run this example, set OPENROUTER_API_KEY environment variable and update http_referer in sample_config.")
-        logger.warning("Example: export OPENROUTER_API_KEY='your_api_key_here'")

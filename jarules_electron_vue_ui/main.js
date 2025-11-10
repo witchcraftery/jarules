@@ -291,6 +291,95 @@ app.whenReady().then(async () => {
     }
   });
 
+  // --- Parallel Git Task IPC Handlers ---
+  const activeParallelRuns = {}; // Store { runId: { shell: PythonShell, results: {} } }
+
+  ipcMain.handle('start-parallel-git-task', async (event, { taskDescription, selectedAgents }) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    const runId = `run-${Date.now()}`; // Simple unique ID
+    console.log(`[IPC Main] Starting parallel git task with runId: ${runId}`);
+
+    const orchestratorScriptPath = path.join(jarulesAgentBaseDir, 'git_task_runners', 'parallel_task_orchestrator.py');
+    const repoPath = path.join(__dirname, '..'); // Assuming repo root is one level up from electron app
+
+    const options = {
+        mode: 'text', // Read line by line
+        pythonOptions: ['-u'],
+        scriptPath: path.dirname(orchestratorScriptPath),
+        args: [
+            'start',
+            '--task_prompt', taskDescription,
+            '--agents', JSON.stringify(selectedAgents),
+            '--repo_path', repoPath
+        ]
+    };
+
+    const shell = new PythonShell(path.basename(orchestratorScriptPath), options);
+    activeParallelRuns[runId] = { shell, results: {} };
+
+    shell.on('message', (message) => {
+        try {
+            const update = JSON.parse(message);
+            // Forward agent updates to the renderer
+            if (update.type === 'agent_update') {
+                mainWindow.webContents.send('parallel-git-task-update', update.data);
+                // Store final results
+                if (update.data.status === 'completed') {
+                    const agentId = update.data.agentId;
+                    if (!activeParallelRuns[runId].results[agentId]) {
+                        activeParallelRuns[runId].results[agentId] = {};
+                    }
+                    activeParallelRuns[runId].results[agentId] = {
+                        solutionSummary: update.data.solutionSummary,
+                        keyFilePaths: update.data.keyFilePaths
+                    };
+                }
+            } else {
+                 // Forward overall run status updates
+                 mainWindow.webContents.send('parallel-git-run-completed', update);
+            }
+        } catch (e) {
+            console.warn('[IPC Main] Non-JSON message from orchestrator:', message);
+        }
+    });
+
+    shell.end((err) => {
+        if (err) {
+            console.error(`[IPC Main] Orchestrator for run ${runId} ended with error:`, err);
+            mainWindow.webContents.send('parallel-git-run-completed', { runId, overallStatus: 'Error Terminated', message: err.message });
+        } else {
+            console.log(`[IPC Main] Orchestrator for run ${runId} finished.`);
+            mainWindow.webContents.send('parallel-git-run-completed', { runId, overallStatus: 'All Agents Complete' });
+        }
+        // Clean up
+        delete activeParallelRuns[runId];
+    });
+
+    return { success: true, runId };
+  });
+
+  ipcMain.handle('get-agent-file-content', async (event, { runId, agentId, filePath }) => {
+      const repoPath = path.join(__dirname, '..');
+      // This requires a new, simple wrapper script for a synchronous call.
+      const result = await runPythonScript('get_file_content_wrapper.py', [runId, agentId, filePath, repoPath]);
+      return result; // Expects { success: true, content: '...' } or { success: false, error: '...' }
+  });
+
+  ipcMain.handle('trigger-agent-version-zip', async(event, { runId, agentId }) => {
+      const repoPath = path.join(__dirname, '..');
+      const result = await runPythonScript('create_zip_archive_wrapper.py', [runId, agentId, repoPath]);
+      return result; // Expects { success: true, downloadPath: '...', filename: '...' } or { success: false, error: '...' }
+  });
+
+  ipcMain.on('cancel-parallel-git-run', (event, runId) => {
+      console.log(`[IPC Main] Received request to cancel run: ${runId}`);
+      const run = activeParallelRuns[runId];
+      if (run && run.shell) {
+          run.shell.terminate();
+          console.log(`[IPC Main] Terminated shell for run ${runId}`);
+      }
+  });
+
 
   createWindow();
 
