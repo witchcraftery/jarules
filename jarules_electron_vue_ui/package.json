@@ -40,10 +40,10 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue": "^6.0.7",
     "concurrently": "^9.1.2",
     "electron": "^39.8.5",
-    "vite": "^6.4.2"
+    "vite": "^8.0.16"
   },
   "dependencies": {
     "js-yaml": "^4.1.1",
